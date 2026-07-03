@@ -1,0 +1,173 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Shared Consensus Brain</title>
+    <link rel="stylesheet" href="/styles.css?v=6" />
+  </head>
+  <body>
+    <main class="app">
+      <section class="topbar">
+        <div class="brand">
+          <span class="pulse"></span>
+          <div>
+            <strong>Shared Consensus Brain</strong>
+            <small>shared memory · consensus workflow</small>
+          </div>
+        </div>
+
+        <label class="path-box">
+          <span>Brain folder</span>
+          <input id="vaultPath" spellcheck="false" />
+        </label>
+
+        <div class="top-actions">
+          <button id="syncBtn">Sync</button>
+          <button id="logsBtn">Logs</button>
+          <button id="loadBtn" class="primary">Load brain</button>
+        </div>
+      </section>
+
+      <section class="workspace">
+        <aside class="panel left">
+          <div class="section-title">Dashboard</div>
+          <label class="search-shell">
+            <span>Search</span>
+            <input id="searchInput" class="search" placeholder="Search..." />
+          </label>
+          <div id="searchResults" class="search-results"></div>
+
+          <div id="changeBox" class="change-box">
+            <div>
+              <strong>No new changes</strong>
+              <small>local brain monitor</small>
+            </div>
+            <button id="reloadGraphBtn">Reload</button>
+          </div>
+
+          <div class="stats">
+            <div><span id="fileCount">0</span><small>files</small></div>
+            <div><span id="linkCount">0</span><small>links</small></div>
+            <div><span id="folderCount">0</span><small>folders</small></div>
+            <div><span id="skillCount">0</span><small>skills</small></div>
+            <div><span id="modelCount">n/a</span><small>contributors</small></div>
+            <div><span id="orphanCount">0</span><small>orphans</small></div>
+            <div><span id="wordCount">0</span><small>words</small></div>
+            <div><span id="messageCount">n/a</span><small>messages</small></div>
+            <div><span id="brainAgeCount">n/a</span><small>brain days</small></div>
+          </div>
+
+          <label class="field">
+            <span>Folder</span>
+            <select id="folderFilter">
+              <option value="">All</option>
+            </select>
+          </label>
+
+          <label class="check">
+            <input id="showLabels" type="checkbox" />
+            <span>Show titles</span>
+          </label>
+
+          <label class="field">
+            <span>Background</span>
+            <input id="bgColor" type="color" value="#050806" />
+          </label>
+
+          <label class="field">
+            <span>Nodes</span>
+            <input id="nodeColor" type="color" value="#f5f5f5" />
+          </label>
+
+          <label class="field">
+            <span>Links</span>
+            <input id="linkColor" type="color" value="#7d8a82" />
+          </label>
+
+          <label class="field">
+            <span>Motion</span>
+            <input id="motionRange" type="range" min="0" max="300" value="48" />
+          </label>
+
+          <label class="field">
+            <span>Node size</span>
+            <input id="sizeRange" type="range" min="8" max="120" value="35" />
+          </label>
+
+          <div class="hint">
+            Drag to move. Scroll to zoom. Click a node to read and edit. Double-click to fit.
+          </div>
+        </aside>
+
+        <section class="stage">
+          <canvas id="graphCanvas"></canvas>
+          <div class="stage-tools">
+            <button id="dashboardToggleBtn">Hide dashboard</button>
+            <button id="toggleReaderBtn">Open reader</button>
+          </div>
+          <div id="status" class="status">Loading...</div>
+          <section class="machine-dashboard" aria-label="Brain Master Dashboard">
+            <div class="machine-head">
+              <span class="section-title">Brain Master Dashboard</span>
+              <strong id="machineName">Local machine</strong>
+            </div>
+            <div class="machine-grid">
+              <div><small>CPU</small><strong id="machineCpu">...</strong></div>
+              <div><small>CPU Load</small><strong id="machineCpuLoad">...</strong></div>
+              <div><small>RAM</small><strong id="machineRam">...</strong></div>
+              <div><small>Disk</small><strong id="machineDisk">...</strong></div>
+              <div><small>Brain growth</small><strong id="machineGrowth">...</strong></div>
+            </div>
+          </section>
+        </section>
+
+        <aside id="reader" class="panel right">
+          <div class="reader-head">
+            <div>
+              <div class="section-title">File</div>
+              <strong id="fileTitle">Nothing selected</strong>
+              <small id="filePath">Choose a node in the graph</small>
+            </div>
+            <button id="backBtn">Close reader</button>
+          </div>
+
+          <div class="tabs">
+            <button id="readTab" class="active">Read</button>
+            <button id="editTab">Edit</button>
+          </div>
+
+          <article id="preview" class="markdown"></article>
+          <textarea id="editor" class="editor" spellcheck="false"></textarea>
+
+          <div class="actions">
+            <button id="saveBtn" class="primary">Save</button>
+            <span id="saveStatus"></span>
+          </div>
+        </aside>
+      </section>
+
+      <dialog id="logsDialog" class="logs-dialog">
+        <div class="reader-head">
+          <div>
+            <div class="section-title">Activity log</div>
+            <strong>Local brain events</strong>
+            <small>opens, saves and manual syncs</small>
+          </div>
+          <div class="dialog-actions">
+            <button id="clearLogsBtn">Clear logs</button>
+            <button id="closeLogsBtn">Close</button>
+          </div>
+        </div>
+        <pre id="logsOutput" class="logs-output">No logs loaded yet.</pre>
+      </dialog>
+
+      <footer class="app-credit">
+        <span>Built for Devs Foundation</span>
+        <a href="https://github.com/Devs-Foundation" target="_blank" rel="noreferrer">github.com/Devs-Foundation</a>
+      </footer>
+    </main>
+
+    <script src="/app.js?v=6"></script>
+  </body>
+</html>
