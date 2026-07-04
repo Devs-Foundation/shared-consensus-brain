@@ -78,8 +78,9 @@ Beim Indexieren werden folgende Ordner ignoriert: `.git`, `.obsidian`, `node_mod
 
 - Knoten sind `.md`-Dateien; Kanten sind **aufgelöste** Links (`[[wikilinks]]`, `[[file|alias]]`, und Markdown-Links zu `.md`). Defekte Links werden **nicht** gezeichnet.
 - **Ziehen** im leeren Bereich zum Verschieben · **Scrollen** zum Zoomen · **einen Knoten ziehen**, um ihn zu bewegen · **Doppelklick**, um den gesamten Graphen einzupassen.
-- **Show titles** schaltet Beschriftungen um · **Motion**- und **Node size**-Regler passen das Erscheinungsbild an · **Background / Nodes / Links** legen Farben fest. Nichts davon berührt die eigenen Dateien.
+- **Show titles** schaltet Beschriftungen um · **Motion**- und **Node size**-Regler passen das Erscheinungsbild an · **Background / Nodes / Links** legen Farben fest. Nichts davon berührt die eigenen Dateien. Knoten-Beschriftungen werden als sauberer, lesbarer Text dargestellt (nie gestreckt).
 - **Hide dashboard** und **Open reader** geben einen klaren, vollflächigen Graphen.
+- **Save graph** — exportiert die aktuelle Ansicht als gebrandetes PNG (Dev's-Foundation-Wasserzeichen + ein Panel mit den Live-Metriken: files, links, folders, skills, contributors, orphans, words, messages, brain days, Brain size). Rechtsklick auf das Canvas für ein einfaches Bild.
 - Ein **lokaler Monitor** („No new changes" / „N brain changes" + **Reload**) beobachtet den Ordner und erlaubt eine Neu-Indexierung, wenn sich Dateien auf der Festplatte ändern.
 
 ### Suche
