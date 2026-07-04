@@ -1,3 +1,5 @@
+> 🌐 **English** · [Português](README.pt.md) · [Español](README.es.md) · [Français](README.fr.md) · [Deutsch](README.de.md) · [中文](README.zh.md)
+
 # Shared Consensus Brain
 
 *Also known as **Cerebro Vivo**.*
@@ -140,14 +142,18 @@ Every number is **measured from the brain you loaded — nothing is hardcoded**.
 
 ### Brain Master Dashboard
 
-A panel with stats about the **machine hosting the brain**: CPU model and cores, CPU load, RAM, disk used/free, and a **brain growth** estimate based on average note size. These readings are **local and informational** — the growth figure is a rough estimate, **not** a promise of infinite storage. Persistent, expandable memory comes from disk and git, not from magic.
+A panel with stats about the **machine hosting the brain** (CPU model and cores, CPU load, RAM) plus **Brain size** and a **brain growth** estimate.
+
+**Brain size** is the total weight of the **loaded brain folder** — the sum of the files inside that vault, measured recursively on the server and cached for ~60 s. It is **not** the disk space of the whole computer, and it shows `n/a` when no folder is loaded.
+
+The **brain growth** figure is a rough estimate based on average note size — **local and informational**, **not** a promise of infinite storage. Persistent, expandable memory comes from disk and git, not from magic.
 
 ## Packaging
 
 To share the app without leaking anything:
 
 1. Copy **only the app files** into a clean folder (`server.js`, `public/`, `abrir-cerebro-vivo.bat`, `README.md`).
-2. **Exclude** `logs/`, `_BACKUPS/`, `backups/`, `node_modules/`, any local config, and anything containing a real machine path.
+2. **Exclude** `logs/`, `_BACKUPS/`, `node_modules/`, any local config, and anything containing a real machine path.
 3. Verify there are no private paths or secrets, e.g.:
 
    ```powershell
