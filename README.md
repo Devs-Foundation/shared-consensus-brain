@@ -1,3 +1,5 @@
+> 🌐 **English** · [Português](README.pt.md) · [Español](README.es.md) · [Français](README.fr.md) · [Deutsch](README.de.md) · [中文](README.zh.md)
+
 # Shared Consensus Brain
 
 *Also known as **Cerebro Vivo**.*
