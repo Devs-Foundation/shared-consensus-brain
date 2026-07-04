@@ -67,6 +67,7 @@ const el = {
   reloadGraphBtn: document.querySelector("#reloadGraphBtn"),
   toggleReaderBtn: document.querySelector("#toggleReaderBtn"),
   dashboardToggleBtn: document.querySelector("#dashboardToggleBtn"),
+  saveGraphBtn: document.querySelector("#saveGraphBtn"),
   syncBtn: document.querySelector("#syncBtn"),
   logsBtn: document.querySelector("#logsBtn"),
   logsDialog: document.querySelector("#logsDialog"),
@@ -111,6 +112,12 @@ function resize() {
   canvas.height = Math.max(1, Math.floor(rect.height * dpr));
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   if (state.nodes.length) fitGraphToView({ focusCore: true });
+}
+
+let resizeTimer = null;
+function scheduleResize() {
+  clearTimeout(resizeTimer);
+  resizeTimer = setTimeout(resize, 80);
 }
 
 function screenToWorld(x, y) {
@@ -206,6 +213,10 @@ function compactNumber(value) {
 
 function bindUi() {
   window.addEventListener("resize", resize);
+  if (window.ResizeObserver) {
+    const observer = new ResizeObserver(scheduleResize);
+    observer.observe(canvas.parentElement);
+  }
   el.loadBtn.addEventListener("click", () => {
     if (document.body.classList.contains("vault-locked")) revealVaultPath();
     else loadGraph();
@@ -213,6 +224,7 @@ function bindUi() {
   el.reloadGraphBtn.addEventListener("click", () => loadGraph({ keepCurrent: true }));
   el.toggleReaderBtn.addEventListener("click", toggleReader);
   el.dashboardToggleBtn.addEventListener("click", toggleDashboard);
+  el.saveGraphBtn.addEventListener("click", () => exportSnapshot({ metrics: true, copy: false }));
   el.syncBtn.addEventListener("click", syncBrain);
   el.logsBtn.addEventListener("click", openLogs);
   el.closeLogsBtn.addEventListener("click", () => el.logsDialog.close());
@@ -628,14 +640,153 @@ function drawGraph(rect) {
   ctx.restore();
 }
 
+function snapshotMetrics() {
+  return [
+    ["Files", el.fileCount.textContent],
+    ["Links", el.linkCount.textContent],
+    ["Folders", el.folderCount.textContent],
+    ["Skills", el.skillCount.textContent],
+    ["Contributors", el.modelCount.textContent],
+    ["Orphans", el.orphanCount.textContent],
+    ["Words", el.wordCount.textContent],
+    ["Messages", el.messageCount.textContent],
+    ["Brain days", el.brainAgeCount.textContent],
+    ["Brain size", el.machineDisk.textContent],
+  ].filter(([, value]) => value && value !== "...");
+}
+
+function drawWatermark(targetCtx, width, height, includeMetrics) {
+  const scale = Math.max(1, Math.min(width, height) / 900);
+  const pad = 24 * scale;
+  const badge = 46 * scale;
+  const line = 22 * scale;
+  const metrics = includeMetrics ? snapshotMetrics() : [];
+  const panelWidth = includeMetrics ? 430 * scale : 355 * scale;
+  const panelHeight = includeMetrics ? (122 + Math.ceil(metrics.length / 2) * 25) * scale : 84 * scale;
+  const x = width - panelWidth - pad;
+  const y = height - panelHeight - pad;
+
+  targetCtx.save();
+  targetCtx.fillStyle = "rgba(0, 0, 0, 0.68)";
+  targetCtx.strokeStyle = "rgba(40, 215, 255, 0.42)";
+  targetCtx.lineWidth = Math.max(1, 1.4 * scale);
+  roundRect(targetCtx, x, y, panelWidth, panelHeight, 14 * scale);
+  targetCtx.fill();
+  targetCtx.stroke();
+
+  const cx = x + pad + badge / 2;
+  const cy = y + pad + badge / 2;
+  targetCtx.strokeStyle = "rgba(255,255,255,0.88)";
+  targetCtx.lineWidth = 2 * scale;
+  targetCtx.beginPath();
+  targetCtx.arc(cx, cy, badge / 2, 0, Math.PI * 2);
+  targetCtx.stroke();
+  targetCtx.beginPath();
+  targetCtx.arc(cx, cy, badge / 2 - 7 * scale, 0, Math.PI * 2);
+  targetCtx.stroke();
+  targetCtx.fillStyle = "rgba(255,255,255,0.94)";
+  targetCtx.font = `800 ${16 * scale}px Segoe UI, Arial`;
+  targetCtx.textAlign = "center";
+  targetCtx.textBaseline = "middle";
+  targetCtx.fillText("DF", cx, cy);
+
+  targetCtx.textAlign = "left";
+  targetCtx.textBaseline = "alphabetic";
+  targetCtx.fillStyle = "#ffffff";
+  targetCtx.font = `800 ${20 * scale}px Segoe UI, Arial`;
+  targetCtx.fillText("Shared Consensus Brain", x + pad + badge + 13 * scale, y + pad + 20 * scale);
+  targetCtx.fillStyle = "rgba(255,255,255,0.68)";
+  targetCtx.font = `500 ${13 * scale}px Segoe UI, Arial`;
+  targetCtx.fillText("Dev's Foundation · local vault snapshot", x + pad + badge + 13 * scale, y + pad + 42 * scale);
+
+  if (includeMetrics) {
+    targetCtx.strokeStyle = "rgba(255,255,255,0.14)";
+    targetCtx.beginPath();
+    targetCtx.moveTo(x + pad, y + 88 * scale);
+    targetCtx.lineTo(x + panelWidth - pad, y + 88 * scale);
+    targetCtx.stroke();
+
+    const leftX = x + pad;
+    const rightX = x + panelWidth / 2 + 8 * scale;
+    let rowY = y + 114 * scale;
+    targetCtx.font = `700 ${14 * scale}px Segoe UI, Arial`;
+    for (let i = 0; i < metrics.length; i += 2) {
+      drawMetric(targetCtx, leftX, rowY, metrics[i], scale);
+      if (metrics[i + 1]) drawMetric(targetCtx, rightX, rowY, metrics[i + 1], scale);
+      rowY += line;
+    }
+  }
+  targetCtx.restore();
+}
+
+function drawMetric(targetCtx, x, y, metric, scale) {
+  targetCtx.fillStyle = "rgba(255,255,255,0.58)";
+  targetCtx.font = `600 ${12 * scale}px Segoe UI, Arial`;
+  targetCtx.fillText(metric[0], x, y);
+  targetCtx.fillStyle = "#ffffff";
+  targetCtx.font = `800 ${15 * scale}px Segoe UI, Arial`;
+  targetCtx.fillText(metric[1], x + 95 * scale, y);
+}
+
+function roundRect(targetCtx, x, y, width, height, radius) {
+  const r = Math.min(radius, width / 2, height / 2);
+  targetCtx.beginPath();
+  targetCtx.moveTo(x + r, y);
+  targetCtx.arcTo(x + width, y, x + width, y + height, r);
+  targetCtx.arcTo(x + width, y + height, x, y + height, r);
+  targetCtx.arcTo(x, y + height, x, y, r);
+  targetCtx.arcTo(x, y, x + width, y, r);
+  targetCtx.closePath();
+}
+
+async function exportSnapshot({ metrics, copy }) {
+  const out = document.createElement("canvas");
+  out.width = canvas.width;
+  out.height = canvas.height;
+  const outCtx = out.getContext("2d");
+  outCtx.fillStyle = state.options.bg || "#050806";
+  outCtx.fillRect(0, 0, out.width, out.height);
+  outCtx.drawImage(canvas, 0, 0);
+  drawWatermark(outCtx, out.width, out.height, metrics);
+
+  const blob = await new Promise((resolve) => out.toBlob(resolve, "image/png", 0.95));
+  if (!blob) {
+    setStatus("Snapshot export failed");
+    return;
+  }
+
+  if (copy && navigator.clipboard && window.ClipboardItem) {
+    try {
+      await navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]);
+      setStatus("Branded snapshot copied");
+      return;
+    } catch {
+      setStatus("Clipboard unavailable. Downloading branded snapshot instead.");
+    }
+  }
+
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-");
+  a.href = url;
+  a.download = metrics ? `shared-consensus-brain-${stamp}.png` : `shared-consensus-brain-clean-${stamp}.png`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+  setStatus(metrics ? "Branded snapshot saved" : "Clean snapshot saved");
+}
+
 function openReader() {
   document.body.classList.remove("reader-closed");
   el.toggleReaderBtn.textContent = "Close reader";
+  scheduleResize();
 }
 
 function closeReader() {
   document.body.classList.add("reader-closed");
   el.toggleReaderBtn.textContent = "Open reader";
+  scheduleResize();
 }
 
 function toggleReader() {
@@ -646,7 +797,7 @@ function toggleReader() {
 function toggleDashboard() {
   const collapsed = document.body.classList.toggle("dashboard-collapsed");
   el.dashboardToggleBtn.textContent = collapsed ? "Show dashboard" : "Hide dashboard";
-  setTimeout(resize, 190);
+  scheduleResize();
 }
 
 function loop() {

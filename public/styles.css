@@ -473,6 +473,9 @@ body.reader-closed .panel.right {
   z-index: 21;
   display: flex;
   gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  max-width: min(760px, calc(100% - 36px));
 }
 
 .dialog-actions {
@@ -484,6 +487,11 @@ body.reader-closed .panel.right {
   border-color: rgba(40, 215, 255, 0.5);
   background: rgba(0, 0, 0, 0.62);
   backdrop-filter: blur(14px);
+}
+
+.stage-tools .busy {
+  opacity: 0.72;
+  pointer-events: none;
 }
 
 .reader-head {

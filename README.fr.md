@@ -78,8 +78,9 @@ Lors de l'indexation, ces dossiers sont ignorés : `.git`, `.obsidian`, `node_mo
 
 - Les nœuds sont des fichiers `.md` ; les arêtes sont des liens **résolus** (`[[wikilinks]]`, `[[file|alias]]`, et les liens Markdown vers des `.md`). Les liens brisés ne sont **pas** dessinés.
 - **Glissez** un espace vide pour vous déplacer · **défilez** pour zoomer · **glissez un nœud** pour le déplacer · **double-cliquez** pour ajuster l'ensemble du graphe.
-- **Show titles** bascule les libellés · les curseurs **Motion** et **Node size** ajustent l'apparence · **Background / Nodes / Links** définissent les couleurs. Rien de tout cela ne touche vos fichiers.
+- **Show titles** bascule les libellés · les curseurs **Motion** et **Node size** ajustent l'apparence · **Background / Nodes / Links** définissent les couleurs. Rien de tout cela ne touche vos fichiers. Les étiquettes des nœuds s'affichent en texte clair et lisible (jamais étirées).
 - **Hide dashboard** et **Open reader** vous donnent un graphe propre, en plein écran.
+- **Save graph** — exporte la vue actuelle en PNG marqué (filigrane Dev's Foundation + un panneau avec les métriques en direct : files, links, folders, skills, contributors, orphans, words, messages, brain days, Brain size). Clic droit sur le canevas pour une image simple.
 - Un **moniteur local** (« No new changes » / « N brain changes » + **Reload**) surveille le dossier et vous permet de réindexer quand des fichiers changent sur le disque.
 
 ### Recherche
