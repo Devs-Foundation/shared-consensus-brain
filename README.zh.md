@@ -78,7 +78,7 @@ C:\example\user\example-brain
 
 - 节点是 `.md` 文件;边是**已解析**的链接(`[[wikilinks]]`、`[[file|alias]]`,以及指向 `.md` 的 Markdown 链接)。失效链接**不会**被绘制出来。
 - **拖动**空白区域可平移视图 · **滚动**可缩放 · **拖动节点**可移动它 · **双击**可让整个图谱适配窗口。
-- **Show titles** 用于切换标签显示 · **Motion** 和 **Node size** 滑块可调整外观 · **Background / Nodes / Links** 用于设置颜色。这些操作都不会改动你的文件。
+- **Show titles** 用于切换标签显示 · **Motion** 和 **Node size** 滑块可调整外观 · **Background / Nodes / Links** 用于设置颜色。这些操作都不会改动你的文件。 节点标签以清晰、易读的正常文本显示（绝不拉伸变形）。
 - **Hide dashboard** 和 **Open reader** 可以让你获得一个干净、全屏的图谱视图。
 - **本地监视器**("No new changes" / "N brain changes" + **Reload**)会监视该文件夹,并在磁盘上的文件发生变化时让你重新建立索引。
 

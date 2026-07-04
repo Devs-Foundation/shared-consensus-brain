@@ -78,7 +78,7 @@ Al indexar, estas carpetas se ignoran: `.git`, `.obsidian`, `node_modules`, `_BA
 
 - Los nodos son archivos `.md`; las aristas son enlaces **resueltos** (`[[wikilinks]]`, `[[file|alias]]`, y enlaces Markdown a `.md`). Los enlaces rotos **no** se dibujan.
 - **Arrastra** el espacio vacío para desplazarte · **desplázate con el scroll** para hacer zoom · **arrastra un nodo** para moverlo · **doble clic** para ajustar todo el grafo a la pantalla.
-- **Show titles** activa/desactiva las etiquetas · los deslizadores **Motion** y **Node size** ajustan el aspecto · **Background / Nodes / Links** definen los colores. Nada de esto toca tus archivos.
+- **Show titles** activa/desactiva las etiquetas · los deslizadores **Motion** y **Node size** ajustan el aspecto · **Background / Nodes / Links** definen los colores. Nada de esto toca tus archivos. Las etiquetas de los nodos se muestran como texto limpio y legible (nunca estiradas).
 - **Hide dashboard** y **Open reader** te dan un grafo limpio a pantalla completa.
 - Un **monitor local** ("No new changes" / "N brain changes" + **Reload**) vigila la carpeta y te permite reindexar cuando cambian los archivos en disco.
 

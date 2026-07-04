@@ -78,7 +78,7 @@ When indexing, these folders are ignored: `.git`, `.obsidian`, `node_modules`, `
 
 - Nodes are `.md` files; edges are **resolved** links (`[[wikilinks]]`, `[[file|alias]]`, and Markdown links to `.md`). Broken links are **not** drawn.
 - **Drag** empty space to pan · **scroll** to zoom · **drag a node** to move it · **double‑click** to fit the whole graph.
-- **Show titles** toggles labels · **Motion** and **Node size** sliders tune the look · **Background / Nodes / Links** set colors. None of this touches your files.
+- **Show titles** toggles labels · **Motion** and **Node size** sliders tune the look · **Background / Nodes / Links** set colors. None of this touches your files. Node labels render as clean, readable text (never stretched).
 - **Hide dashboard** and **Open reader** give you a clean, full‑stage graph.
 - A **local monitor** ("No new changes" / "N brain changes" + **Reload**) watches the folder and lets you re‑index when files change on disk.
 

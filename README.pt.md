@@ -78,7 +78,7 @@ Ao indexar, estas pastas são ignoradas: `.git`, `.obsidian`, `node_modules`, `_
 
 - Os nós são ficheiros `.md`; as arestas são links **resolvidos** (`[[wikilinks]]`, `[[file|alias]]`, e links Markdown para `.md`). Links quebrados **não** são desenhados.
 - **Arraste** o espaço vazio para deslocar (pan) · **scroll** para ampliar/reduzir · **arraste um nó** para o mover · **duplo clique** para ajustar o grafo todo ao ecrã.
-- **Show titles** alterna as etiquetas · os sliders **Motion** e **Node size** ajustam o aspeto · **Background / Nodes / Links** definem as cores. Nada disto toca nos seus ficheiros.
+- **Show titles** alterna as etiquetas · os sliders **Motion** e **Node size** ajustam o aspeto · **Background / Nodes / Links** definem as cores. Nada disto toca nos seus ficheiros. As etiquetas dos nós aparecem como texto normal e legível (nunca esticadas).
 - **Hide dashboard** e **Open reader** dão-lhe um grafo limpo, em ecrã total.
 - Um **monitor local** ("No new changes" / "N brain changes" + **Reload**) vigia a pasta e permite reindexar quando os ficheiros mudam no disco.
 
