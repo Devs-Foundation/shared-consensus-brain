@@ -154,12 +154,39 @@ function searchTextOf(text) {
 
 function skillCount(vault) {
   const file = path.join(vault, "MASTER_SKILLS.md");
-  if (!fs.existsSync(file)) return null;
-  const text = fs.readFileSync(file, "utf8");
-  const total = text.match(/Total:[\s\S]*?\*\*(\d+)\s+skills\*\*/i);
-  if (total) return Number(total[1]);
-  const vaultOnly = text.match(/Skills do Vault[^\n]*[—-]\s*(\d+)/i);
-  return vaultOnly ? Number(vaultOnly[1]) : null;
+  const skillsRoot = path.join(vault, "_CONHECIMENTO", "skills");
+  let liveVaultSkills = null;
+  let browseSkills = 0;
+
+  if (fs.existsSync(skillsRoot)) {
+    liveVaultSkills = 0;
+    const walkSkills = (dir) => {
+      for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+        if (entry.name === ".archive") continue;
+        const full = path.join(dir, entry.name);
+        if (entry.isDirectory()) {
+          walkSkills(full);
+        } else if (entry.isFile() && entry.name === "SKILL.md") {
+          liveVaultSkills += 1;
+        }
+      }
+    };
+    walkSkills(skillsRoot);
+  }
+
+  if (fs.existsSync(file)) {
+    const text = fs.readFileSync(file, "utf8");
+    const browse = text.match(/(\d+)\s+do\s+browse\.sh/i);
+    if (browse) browseSkills = Number(browse[1]);
+    if (liveVaultSkills === null) {
+      const total = text.match(/Total:[\s\S]*?\*\*(\d+)\s+skills\*\*/i);
+      if (total) return Number(total[1]);
+      const vaultOnly = text.match(/Skills do Vault[^\n]*[—-]\s*(\d+)/i);
+      return vaultOnly ? Number(vaultOnly[1]) : null;
+    }
+  }
+
+  return liveVaultSkills === null ? null : liveVaultSkills + browseSkills;
 }
 
 function gitContributorCount(vault) {
