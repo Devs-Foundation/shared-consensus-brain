@@ -12,6 +12,7 @@ const PUBLIC = path.join(ROOT, "public");
 const APP_LOG_DIR = path.join(ROOT, "logs");
 const APP_LOG_FILE = path.join(APP_LOG_DIR, "events.jsonl");
 let lastCpuSnapshot = null;
+const vaultSizeCache = new Map();
 
 const TEXT_TYPES = {
   ".html": "text/html; charset=utf-8",
@@ -461,6 +462,36 @@ function bytes(value) {
   return Math.max(0, Number(value || 0));
 }
 
+function vaultContentSize(vault) {
+  const cached = vaultSizeCache.get(vault);
+  const now = Date.now();
+  if (cached && now - cached.time < 60000) return cached.value;
+
+  let total = 0;
+  let files = 0;
+  const walk = (dir) => {
+    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+      if (entry.isDirectory()) {
+        if (IGNORE_DIRS.has(entry.name)) continue;
+        walk(path.join(dir, entry.name));
+        continue;
+      }
+      if (!entry.isFile()) continue;
+      try {
+        total += fs.statSync(path.join(dir, entry.name)).size;
+        files += 1;
+      } catch {
+        // File changed while measuring; skip it in this pass.
+      }
+    }
+  };
+
+  walk(vault);
+  const value = { bytes: total, files };
+  vaultSizeCache.set(vault, { time: now, value });
+  return value;
+}
+
 function runPowerShell(command) {
   return new Promise((resolve) => {
     execFile(
@@ -514,6 +545,7 @@ async function machineStats(vault) {
   const cpus = os.cpus();
   const totalMem = bytes(os.totalmem());
   const freeMem = bytes(os.freemem());
+  const vaultSize = vaultContentSize(vault);
   const [disk, temperature] = await Promise.all([diskStats(vault), cpuTemperature()]);
   return {
     ok: true,
@@ -530,6 +562,7 @@ async function machineStats(vault) {
       used: totalMem - freeMem,
     },
     disk,
+    vaultSize,
     temperature,
     uptime: os.uptime(),
     generatedAt: new Date().toISOString(),

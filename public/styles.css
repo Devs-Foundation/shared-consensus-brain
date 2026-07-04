@@ -115,8 +115,12 @@ button.primary {
 }
 
 .path-box {
+  position: relative;
+  z-index: 30;
   display: grid;
   gap: 5px;
+  background: #000;
+  border-radius: 10px;
 }
 
 .path-box input,
@@ -127,7 +131,7 @@ button.primary {
   border: 1px solid var(--line);
   border-radius: 8px;
   padding: 9px 10px;
-  background: rgba(0, 0, 0, 0.42);
+  background: #000;
   color: var(--text);
 }
 

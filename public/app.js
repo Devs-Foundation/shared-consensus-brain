@@ -510,13 +510,13 @@ function updateChangeBox(changed) {
 }
 
 function tick() {
-  const motion = Math.min(state.options.motion, 1.8);
+  const motion = Math.min(state.options.motion, 4.5);
   if (motion <= 0.01) return;
   const visible = state.nodes.filter((n) => n.visible);
-  const centerForce = 0.000035 * motion;
-  const homeForce = 0.00016 * motion;
-  const linkForce = 0.0019 * motion;
-  const repel = 128 * motion;
+  const centerForce = 0.000045 * motion;
+  const homeForce = 0.00022 * motion;
+  const linkForce = 0.0028 * motion;
+  const repel = 175 * motion;
 
   for (const link of state.links) {
     if (!link.source.visible || !link.target.visible) continue;
@@ -561,7 +561,7 @@ function tick() {
     node.vy += -node.y * center;
     node.vx *= node.kind === "hub" ? 0.9 : 0.87;
     node.vy *= node.kind === "hub" ? 0.9 : 0.87;
-    const maxSpeed = 8 + motion * 7;
+    const maxSpeed = 12 + motion * 14;
     const speed = Math.hypot(node.vx, node.vy);
     if (speed > maxSpeed) {
       node.vx = (node.vx / speed) * maxSpeed;
@@ -582,11 +582,12 @@ function drawGraph(rect) {
   for (const link of state.links) {
     if (!link.source.visible || !link.target.visible) continue;
     ctx.strokeStyle = rgba(state.options.link, 0.28);
-    const sway = 2.8 * Math.min(state.options.motion, 1.8);
-    const sx = link.source.x + Math.sin(time * 0.55 + link.source.phase) * sway;
-    const sy = link.source.y + Math.cos(time * 0.48 + link.source.phase) * sway;
-    const tx = link.target.x + Math.sin(time * 0.55 + link.target.phase) * sway;
-    const ty = link.target.y + Math.cos(time * 0.48 + link.target.phase) * sway;
+    const visualMotion = Math.min(state.options.motion, 4.5);
+    const sway = 3.8 * visualMotion;
+    const sx = link.source.x + Math.sin(time * (0.65 + visualMotion * 0.16) + link.source.phase) * sway;
+    const sy = link.source.y + Math.cos(time * (0.58 + visualMotion * 0.14) + link.source.phase) * sway;
+    const tx = link.target.x + Math.sin(time * (0.65 + visualMotion * 0.16) + link.target.phase) * sway;
+    const ty = link.target.y + Math.cos(time * (0.58 + visualMotion * 0.14) + link.target.phase) * sway;
     ctx.beginPath();
     ctx.moveTo(sx, sy);
     ctx.lineTo(tx, ty);
@@ -595,9 +596,10 @@ function drawGraph(rect) {
 
   for (const node of state.nodes) {
     if (!node.visible) continue;
-    const sway = 3.4 * Math.min(state.options.motion, 1.8);
-    const drawX = node.x + Math.sin(time * 0.55 + node.phase) * sway;
-    const drawY = node.y + Math.cos(time * 0.48 + node.phase) * sway;
+    const visualMotion = Math.min(state.options.motion, 4.5);
+    const sway = 4.6 * visualMotion;
+    const drawX = node.x + Math.sin(time * (0.65 + visualMotion * 0.16) + node.phase) * sway;
+    const drawY = node.y + Math.cos(time * (0.58 + visualMotion * 0.14) + node.phase) * sway;
     const selected = state.selected && state.selected.id === node.id;
     const r = node.radius * state.options.size * (selected ? 1.7 : 1);
     ctx.fillStyle = selected ? "#ffffff" : rgba(state.options.node, 0.82);
@@ -611,15 +613,16 @@ function drawGraph(rect) {
     const showLabel =
       selected ||
       node === state.hover ||
-      (state.camera.zoom > 1.55 && node.degree > 0) ||
-      (state.camera.zoom > 1.05 && node.degree > 5) ||
-      (state.camera.zoom > 0.78 && node.degree > 14);
+      (state.camera.zoom > 0.9 && node.degree > 0) ||
+      (state.camera.zoom > 0.55 && node.degree > 5) ||
+      (state.camera.zoom > 0.34 && node.degree > 14);
 
     if (state.options.labels && showLabel) {
-      ctx.font = `${8.5 / state.camera.zoom}px Segoe UI, Arial`;
-      ctx.fillStyle = selected ? "#ffffff" : "rgba(255,255,255,0.72)";
+      const labelSize = Math.max(11 / state.camera.zoom, 6.8);
+      ctx.font = `700 ${labelSize}px Segoe UI, Arial`;
+      ctx.fillStyle = selected ? "#ffffff" : "rgba(255,255,255,0.82)";
       ctx.textAlign = "center";
-      ctx.fillText(node.title.slice(0, 28), drawX, drawY + r + 11 / state.camera.zoom);
+      ctx.fillText(node.title.slice(0, 30), drawX, drawY + r + 13 / state.camera.zoom);
     }
   }
   ctx.restore();
@@ -899,7 +902,8 @@ async function loadMachineStats() {
     el.machineCpu.textContent = `${shortCpu(data.cpu?.model)} · ${data.cpu?.cores || "?"} cores`;
     el.machineCpuLoad.textContent = data.cpu?.usage == null ? "warming up" : `${Math.round(data.cpu.usage)}%`;
     el.machineRam.textContent = data.memory ? `${formatBytes(data.memory.used)} / ${formatBytes(data.memory.total)}` : "n/a";
-    el.machineDisk.textContent = data.disk ? `${formatBytes(data.disk.used)} used · ${formatBytes(data.disk.free)} free` : "n/a";
+    const brainBytes = data.vaultSize?.bytes ?? state.graph.stats?.totalBytes;
+    el.machineDisk.textContent = brainBytes ? formatBytes(brainBytes) : "n/a";
     el.machineGrowth.textContent = growthEstimate(data.disk?.free, state.graph.stats?.avgFileBytes);
   } catch {
     // Machine stats are useful, but the graph remains primary.
