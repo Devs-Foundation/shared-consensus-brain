@@ -148,7 +148,7 @@ Nur verwenden, wenn der geladene Ordner ein gültiger Git-Klon mit dem richtigen
 Neben **Sync** und **Logs** bietet die Leiste:
 
 - **See changes** — zeigt das aktuelle `git diff` des geladenen Brains, damit du vor dem Sync genau prüfen kannst, was sich geändert hat.
-- **Check brain** — ein Gesundheitsbericht des geladenen Brains: defekte Links, Waisen, doppelte Titel, doppelte Notiznamen und fehlerhaftes Frontmatter. Der schnellste Weg, um Daten zu erkennen, die bereinigt werden müssen.
+- **Check brain** — ein Gesundheitsbericht des geladenen Brains, der Probleme **klassifiziert**, statt eine große „broken links"-Gesamtzahl auszugeben: **behebbare defekte Links** vs **erwartete/Rausch-Referenzen** (Assets & Anhänge, als Wikilinks geschriebene externe URLs, Platzhalter/Vorlagen, private/lokale und Verzeichnis-Referenzen), plus Waisen, **behebbare vs erwartete doppelte Notiznamen** und fehlerhaftes Frontmatter. Echte Probleme heben sich vom erwarteten Rauschen ab.
 - **Backups** — der oben beschriebene On-Demand-Backup-Manager.
 
 Alle laufen **lokal und auf Anforderung** und zeigen ihr Ergebnis im **Logs**-Fenster.

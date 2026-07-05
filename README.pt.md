@@ -148,7 +148,7 @@ Use-o apenas quando a pasta carregada for um clone git válido com o remote corr
 Além de **Sync** e **Logs**, a barra tem:
 
 - **See changes** — mostra o `git diff` atual do cérebro carregado, para rever exatamente o que mudou antes de sincronizar.
-- **Check brain** — um relatório de saúde do cérebro carregado: links quebrados, órfãos, títulos duplicados, nomes de nota duplicados e frontmatter malformado. É a forma mais rápida de detetar dados que precisam de limpeza.
+- **Check brain** — um relatório de saúde do cérebro carregado que **classifica** os problemas em vez de despejar um único total de "broken links": **links partidos acionáveis** vs **referências esperadas/ruído** (assets e anexos, URLs externos escritos como wikilinks, placeholders/templates, referências privadas/locais e de diretório), além de órfãos, **nomes de nota duplicados acionáveis vs esperados**, e frontmatter malformado. Os problemas reais destacam-se do ruído esperado.
 - **Backups** — o gestor de backups a pedido descrito acima.
 
 Todas correm **localmente e a pedido**, e reportam o resultado na janela **Logs**.

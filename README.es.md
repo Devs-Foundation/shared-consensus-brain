@@ -148,7 +148,7 @@ El botón **Sync** ejecuta Git **solo cuando lo pulsas**, en la carpeta del cere
 Junto a **Sync** y **Logs**, la barra tiene:
 
 - **See changes** — muestra el `git diff` actual del cerebro cargado, para que revises exactamente qué cambió antes de sincronizar.
-- **Check brain** — un informe de salud del cerebro cargado: enlaces rotos, huérfanos, títulos duplicados, nombres de nota duplicados y frontmatter malformado. Es la forma más rápida de detectar datos que necesitan limpieza.
+- **Check brain** — un informe de salud del cerebro cargado que **clasifica** los problemas en lugar de volcar un único total de "broken links": **enlaces rotos accionables** vs **referencias esperadas/ruido** (recursos y adjuntos, URLs externas escritas como wikilinks, placeholders/plantillas, referencias privadas/locales y de directorio), además de huérfanos, **nombres de nota duplicados accionables vs esperados**, y frontmatter malformado. Los problemas reales destacan sobre el ruido esperado.
 - **Backups** — el gestor de copias de seguridad a demanda descrito arriba.
 
 Todas se ejecutan **localmente y a demanda**, y muestran su resultado en la ventana de **Logs**.
