@@ -180,7 +180,7 @@ async function readApiResponse(res, fallback = "Action failed") {
         .replace(/<[^>]+>/g, " ")
         .replace(/\s+/g, " ")
         .trim();
-      throw new Error(clean || `${fallback} (${res.status})`);
+      data = { ok: res.ok, message: clean || `${fallback} (${res.status})` };
     }
   }
   if (!res.ok || data.ok === false) {
@@ -1403,7 +1403,14 @@ async function createNote() {
     }, "Create failed");
     el.search.value = "";
     await loadGraph({ keepCurrent: true });
-    const node = state.nodes.find((item) => item.path === data.path);
+    const node = state.nodes.find((item) => item.path === data.path) || {
+      id: data.path,
+      path: data.path,
+      title: data.title || cleanTitle,
+      folder: data.path && data.path.includes("/") ? data.path.split("/")[0] : "root",
+      virtual: false,
+      searchText: cleanTitle,
+    };
     if (node) {
       focusNode(node);
       await selectNode(node);
@@ -1436,7 +1443,7 @@ async function postVaultAction(path, button, loadingText, doneText = "Done.") {
   } catch (err) {
     const message = cleanError(err, "Action failed");
     el.logsOutput.textContent = message;
-    setStatus(message);
+    setStatus(`${button.textContent || "Action"} needs attention. See logs.`);
     return null;
   } finally {
     button.disabled = false;
@@ -1512,7 +1519,7 @@ function renderBrowserItems(items, container = el.fileBrowserList, depth = 0) {
         <strong>${escapeHtml(title)}</strong>
         <small>${escapeHtml(detail)}</small>
       </span>
-      ${item.type === "file" ? '<span class="browser-edit-action">Edit</span>' : ""}
+      ${item.type === "file" ? '<span class="browser-file-actions"><span class="browser-open-action">Open</span><span class="browser-edit-action">Edit</span></span>' : ""}
     `;
     const wrapper = document.createElement("div");
     wrapper.appendChild(button);
@@ -1532,7 +1539,8 @@ function renderBrowserItems(items, container = el.fileBrowserList, depth = 0) {
         await loadBrowserFolder(item.path, children, depth + 1);
         return;
       }
-      await openBrowserFile(item);
+      const wantsEdit = Boolean(event.target.closest(".browser-edit-action"));
+      await openBrowserFile(item, wantsEdit ? "edit" : "read");
     });
     tree.appendChild(wrapper);
   }
@@ -1560,7 +1568,7 @@ function renderBrowserSearch() {
   renderBrowserItems(results, el.fileBrowserList, 0);
 }
 
-async function openBrowserFile(item) {
+async function openBrowserFile(item, mode = "read") {
   const node = nodeByPath(item.path) || {
     id: item.path,
     path: item.path,
@@ -1572,8 +1580,8 @@ async function openBrowserFile(item) {
   const realNode = nodeByPath(item.path);
   if (realNode) focusNode(realNode);
   await selectNode(realNode || node);
-  setMode("edit");
-  el.editor.focus();
+  setMode(mode);
+  if (mode === "edit") el.editor.focus();
 }
 
 async function syncBrain() {
@@ -1731,14 +1739,19 @@ function formatLog(item) {
     item.label || item.action || "",
     actor ? `actor: ${actor}` : "",
     origin ? `origin: ${origin}` : "",
-    item.vault ? `vault: ${item.vault}` : "",
+    item.vault ? "vault: loaded brain" : "",
     item.file ? `file: ${item.file}` : "",
-    item.backup ? `backup: ${item.backup}` : "",
+    item.backup ? `backup: ${safeLogPath(item.backup)}` : "",
     metrics,
     item.message || "",
     steps,
   ].filter(Boolean);
   return parts.join("\n");
+}
+
+function safeLogPath(value) {
+  const parts = String(value || "").replace(/\\/g, "/").split("/").filter(Boolean);
+  return parts.slice(-3).join("/") || "local path";
 }
 
 async function loadMachineStats() {
@@ -1749,8 +1762,8 @@ async function loadMachineStats() {
     el.machineCpu.textContent = `${shortCpu(data.cpu?.model)} · ${data.cpu?.cores || "?"} cores`;
     el.machineCpuLoad.textContent = data.cpu?.usage == null ? "warming up" : `${Math.round(data.cpu.usage)}%`;
     el.machineRam.textContent = data.memory ? `${formatBytes(data.memory.used)} / ${formatBytes(data.memory.total)}` : "n/a";
-    const brainBytes = data.vaultSize?.bytes ?? state.graph.stats?.totalBytes;
-    el.machineDisk.textContent = brainBytes ? formatBytes(brainBytes) : "n/a";
+    const brainBytes = Number(data.vaultSize?.bytes ?? state.graph.stats?.totalBytes ?? 0);
+    el.machineDisk.textContent = brainBytes > 0 ? formatBytes(brainBytes) : "n/a";
     el.machineGrowth.textContent = growthEstimate(data.disk?.free, state.graph.stats?.avgFileBytes);
   } catch {
     // Machine stats are useful, but the graph remains primary.

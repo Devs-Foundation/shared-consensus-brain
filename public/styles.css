@@ -429,9 +429,16 @@ body.dashboard-collapsed .panel.left {
   opacity: 0;
 }
 
-.browser-edit-action {
+.browser-file-actions {
   flex: 0 0 auto;
   margin-left: auto;
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.browser-open-action,
+.browser-edit-action {
   border: 1px solid rgba(40, 215, 255, 0.42);
   border-radius: 8px;
   padding: 7px 12px;
@@ -441,6 +448,13 @@ body.dashboard-collapsed .panel.left {
   font-weight: 800;
 }
 
+.browser-open-action {
+  border-color: rgba(255, 255, 255, 0.18);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--muted);
+}
+
+.browser-item.file:hover .browser-open-action,
 .browser-item.file:hover .browser-edit-action {
   border-color: rgba(40, 215, 255, 0.8);
   background: rgba(40, 215, 255, 0.16);

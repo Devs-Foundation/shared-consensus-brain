@@ -455,42 +455,114 @@ function skillCount(vault) {
 }
 
 function gitContributorCount(vault) {
+  const fallback = gitMetaFromLocalLogs(vault);
   try {
     const gitDir = path.join(vault, ".git");
-    if (!fs.existsSync(gitDir)) return null;
-    const out = execFileSync("git", ["log", "--format=%aN <%aE>"], {
+    if (!fs.existsSync(gitDir)) return fallback.contributors;
+    const out = execFileSync("git", ["shortlog", "-sne", "--all"], {
       cwd: vault,
       timeout: 12000,
       encoding: "utf8",
+      maxBuffer: 1024 * 1024,
     });
     const authors = new Set();
     const lines = String(out || "").split(/\r?\n/).filter(Boolean);
     for (const line of lines) {
+      const clean = line.replace(/^\s*\d+\s+/, "").trim().toLowerCase();
+      if (clean) authors.add(clean);
+    }
+    if (authors.size) return authors.size;
+    const logOut = execFileSync("git", ["log", "--format=%aN <%aE>", "--max-count=5000"], {
+      cwd: vault,
+      timeout: 12000,
+      encoding: "utf8",
+      maxBuffer: 1024 * 1024,
+    });
+    for (const line of String(logOut || "").split(/\r?\n/).filter(Boolean)) {
       const clean = line.trim().toLowerCase();
       if (clean) authors.add(clean);
     }
-    return authors.size || null;
+    return authors.size || fallback.contributors;
   } catch {
-    return null;
+    return fallback.contributors;
   }
 }
 
 function gitBrainAgeDays(vault) {
+  const fallback = gitMetaFromLocalLogs(vault);
   try {
     const gitDir = path.join(vault, ".git");
-    if (!fs.existsSync(gitDir)) return null;
-    const out = execFileSync("git", ["log", "--reverse", "--format=%ct"], {
+    if (!fs.existsSync(gitDir)) return fallback.days;
+    const roots = execFileSync("git", ["rev-list", "--max-parents=0", "HEAD"], {
       cwd: vault,
       timeout: 12000,
       encoding: "utf8",
+      maxBuffer: 1024 * 128,
     });
-    const firstCommit = String(out || "").split(/\r?\n/).find(Boolean);
-    const timestamp = Number(firstCommit);
-    if (!Number.isFinite(timestamp) || timestamp <= 0) return null;
+    const root = String(roots || "").split(/\r?\n/).find(Boolean);
+    if (!root) return fallback.days;
+    const out = execFileSync("git", ["show", "-s", "--format=%ct", root.trim()], {
+      cwd: vault,
+      timeout: 12000,
+      encoding: "utf8",
+      maxBuffer: 1024 * 128,
+    });
+    const timestamp = Number(String(out || "").trim());
+    if (!Number.isFinite(timestamp) || timestamp <= 0) return fallback.days;
     return Math.max(0, Math.floor((Date.now() - timestamp * 1000) / 86400000));
   } catch {
-    return null;
+    return fallback.days;
   }
+}
+
+function gitMetaFromLocalLogs(vault) {
+  const result = { contributors: null, days: null };
+  try {
+    const gitDir = path.join(vault, ".git");
+    if (!fs.existsSync(gitDir)) return result;
+
+    const logFiles = [];
+    const addLog = (file) => {
+      if (fs.existsSync(file) && fs.statSync(file).isFile()) logFiles.push(file);
+    };
+    addLog(path.join(gitDir, "logs", "HEAD"));
+
+    const refsRoot = path.join(gitDir, "logs", "refs");
+    if (fs.existsSync(refsRoot)) {
+      const walk = (dir) => {
+        for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+          const full = path.join(dir, entry.name);
+          if (entry.isDirectory()) walk(full);
+          else if (entry.isFile()) logFiles.push(full);
+        }
+      };
+      walk(refsRoot);
+    }
+
+    const authors = new Set();
+    let oldest = null;
+    for (const file of logFiles) {
+      const text = fs.readFileSync(file, "utf8");
+      for (const line of text.split(/\r?\n/)) {
+        if (!line.trim()) continue;
+        const match = line.match(/^[0-9a-f]{40}\s+[0-9a-f]{40}\s+(.+?)\s+<([^>]+)>\s+(\d{9,})\s+[+-]\d{4}\t/);
+        if (!match) continue;
+        const name = match[1].trim().toLowerCase();
+        const email = match[2].trim().toLowerCase();
+        const timestamp = Number(match[3]);
+        if (name || email) authors.add(`${name}<${email}>`);
+        if (Number.isFinite(timestamp) && timestamp > 0) {
+          oldest = oldest === null ? timestamp : Math.min(oldest, timestamp);
+        }
+      }
+    }
+
+    result.contributors = authors.size || null;
+    result.days = oldest === null ? null : Math.max(0, Math.floor((Date.now() - oldest * 1000) / 86400000));
+  } catch {
+    // Keep nulls: some folders are not git vaults.
+  }
+  return result;
 }
 
 function extractWikiLinks(text) {
@@ -1121,35 +1193,36 @@ function vaultContentSize(vault) {
 
 function runPowerShell(command) {
   return new Promise((resolve) => {
-    execFile(
-      "powershell",
-      ["-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", command],
-      { timeout: 12000 },
-      (error, stdout) => {
-        if (error) return resolve(null);
-        resolve(String(stdout || "").trim());
-      },
-    );
+    try {
+      execFile(
+        "powershell",
+        ["-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", command],
+        { timeout: 12000, windowsHide: true },
+        (error, stdout) => {
+          if (error) return resolve(null);
+          resolve(String(stdout || "").trim());
+        },
+      );
+    } catch {
+      resolve(null);
+    }
   });
 }
 
 async function diskStats(vault) {
-  if (process.platform === "win32") {
-    const root = path.parse(vault).root.replace(/\\$/, "");
-    const out = await runPowerShell(
-      `Get-CimInstance Win32_LogicalDisk -Filter "DeviceID='${root}'" | Select-Object Size,FreeSpace | ConvertTo-Json -Compress`,
-    );
-    if (!out) return null;
-    try {
-      const data = JSON.parse(out);
-      const total = bytes(data.Size);
-      const free = bytes(data.FreeSpace);
-      return { total, free, used: Math.max(0, total - free) };
-    } catch {
-      return null;
-    }
+  try {
+    if (typeof fs.statfsSync !== "function") return null;
+    const stat = fs.statfsSync(vault);
+    const blockSize = bytes(stat.bsize || stat.frsize || 0);
+    const blocks = bytes(stat.blocks || 0);
+    const available = bytes(stat.bavail ?? stat.bfree ?? 0);
+    if (!blockSize || !blocks) return null;
+    const total = blockSize * blocks;
+    const free = blockSize * available;
+    return { total, free, used: Math.max(0, total - free) };
+  } catch {
+    return null;
   }
-  return null;
 }
 
 async function cpuTemperature() {
@@ -1169,29 +1242,82 @@ async function cpuTemperature() {
 }
 
 async function machineStats(vault) {
-  const cpus = os.cpus();
-  const totalMem = bytes(os.totalmem());
-  const freeMem = bytes(os.freemem());
-  const vaultSize = vaultContentSize(vault);
-  const [disk, temperature] = await Promise.all([diskStats(vault), cpuTemperature()]);
+  const cpus = (() => {
+    try {
+      return os.cpus();
+    } catch {
+      return [];
+    }
+  })();
+  const totalMem = (() => {
+    try {
+      return bytes(os.totalmem());
+    } catch {
+      return 0;
+    }
+  })();
+  const freeMem = (() => {
+    try {
+      return bytes(os.freemem());
+    } catch {
+      return 0;
+    }
+  })();
+  const vaultSize = (() => {
+    try {
+      return vaultContentSize(vault);
+    } catch {
+      return null;
+    }
+  })();
+  const host = (() => {
+    try {
+      return os.hostname() || "Local machine";
+    } catch {
+      return "Local machine";
+    }
+  })();
+  // Keep the dashboard resilient: the brain size is measured directly from the
+  // loaded vault. Disk probing uses Node's local filesystem stats and must never
+  // require shell access or take the whole stats panel down.
+  const disk = await diskStats(vault);
+  const temperature = null;
   return {
     ok: true,
-    host: os.hostname(),
-    platform: `${os.type()} ${os.release()} (${os.arch()})`,
+    host,
+    platform: (() => {
+      try {
+        return `${os.type()} ${os.release()} (${os.arch()})`;
+      } catch {
+        return "";
+      }
+    })(),
     cpu: {
       model: cpus[0] ? cpus[0].model : "Unknown CPU",
       cores: cpus.length,
-      usage: cpuUsagePercent(),
+      usage: (() => {
+        try {
+          return cpuUsagePercent();
+        } catch {
+          return null;
+        }
+      })(),
     },
-    memory: {
+    memory: totalMem ? {
       total: totalMem,
       free: freeMem,
       used: totalMem - freeMem,
-    },
+    } : null,
     disk,
     vaultSize,
     temperature,
-    uptime: os.uptime(),
+    uptime: (() => {
+      try {
+        return os.uptime();
+      } catch {
+        return null;
+      }
+    })(),
     generatedAt: new Date().toISOString(),
   };
 }
@@ -1298,7 +1424,37 @@ async function route(req, res) {
 
     if (url.pathname === "/api/stats") {
       const vault = safeVault(url.searchParams.get("vault"));
-      return json(res, 200, await machineStats(vault));
+      try {
+        return json(res, 200, await machineStats(vault));
+      } catch (error) {
+        const vaultSize = (() => {
+          try {
+            return vaultContentSize(vault);
+          } catch {
+            return null;
+          }
+        })();
+        const host = (() => {
+          try {
+            return os.hostname() || "Local machine";
+          } catch {
+            return "Local machine";
+          }
+        })();
+        return json(res, 200, {
+          ok: false,
+          host,
+          platform: "",
+          cpu: { model: "Unknown CPU", cores: 0, usage: null },
+          memory: null,
+          disk: null,
+          vaultSize,
+          temperature: null,
+          uptime: null,
+          generatedAt: new Date().toISOString(),
+          warning: error && error.message ? error.message : String(error),
+        });
+      }
     }
 
     if (url.pathname === "/api/sync" && req.method === "POST") {
