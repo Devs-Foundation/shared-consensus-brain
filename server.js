@@ -2,6 +2,7 @@ const http = require("http");
 const fs = require("fs");
 const path = require("path");
 const os = require("os");
+const crypto = require("crypto");
 const { URL } = require("url");
 const { execFile, execFileSync } = require("child_process");
 
@@ -9,6 +10,8 @@ const PORT = Number(process.env.PORT || 8787);
 const HOST = "127.0.0.1";
 const ROOT = __dirname;
 const PUBLIC = path.join(ROOT, "public");
+const APP_DATA_DIR = path.join(ROOT, "data");
+const FAVORITES_FILE = path.join(APP_DATA_DIR, "favorites.json");
 const APP_LOG_DIR = path.join(ROOT, "logs");
 const APP_LOG_FILE = path.join(APP_LOG_DIR, "events.jsonl");
 let lastCpuSnapshot = null;
@@ -27,6 +30,7 @@ const IGNORE_DIRS = new Set([
   ".obsidian",
   "node_modules",
   "_BACKUPS",
+  ".archive",
   ".trash",
   ".cache",
 ]);
@@ -50,15 +54,156 @@ function bad(res, message, status = 400) {
   json(res, status, { ok: false, error: message });
 }
 
-function logEvent(vault, action, details = {}) {
+function shortText(value, max = 180) {
+  const text = String(value || "").replace(/\s+/g, " ").trim();
+  return text.length > max ? `${text.slice(0, max - 1)}...` : text;
+}
+
+function safeGitConfig(vault, key) {
+  if (!vault || !fs.existsSync(path.join(vault, ".git"))) return "";
+  try {
+    return shortText(execFileSync("git", ["config", "--get", key], {
+      cwd: vault,
+      timeout: 5000,
+      encoding: "utf8",
+    }));
+  } catch {
+    return "";
+  }
+}
+
+function eventActor(vault) {
+  const gitName = safeGitConfig(vault, "user.name");
+  if (gitName) {
+    return {
+      name: gitName,
+      machine: os.hostname(),
+      source: "git-config",
+    };
+  }
+
+  try {
+    const user = os.userInfo().username;
+    if (user) {
+      return {
+        name: user,
+        machine: os.hostname(),
+        source: "local-user",
+      };
+    }
+  } catch {
+    // No useful local identity available.
+  }
+
+  return null;
+}
+
+function requestOrigin(req) {
+  if (!req) return null;
+  const ua = shortText(req.headers["user-agent"] || "", 120);
+  const browser = ua.includes("Edg/")
+    ? "Edge"
+    : ua.includes("Brave")
+      ? "Brave"
+      : ua.includes("Chrome/")
+        ? "Chrome"
+        : ua.includes("Firefox/")
+          ? "Firefox"
+          : ua ? "Browser" : "";
+  return {
+    address: req.socket && req.socket.remoteAddress ? req.socket.remoteAddress : "local",
+    client: browser,
+  };
+}
+
+function eventLabel(action, details = {}) {
+  const labels = {
+    "graph:index": "Indexed graph",
+    "file:open": "Opened note",
+    "file:save": "Saved note",
+    "file:delete": "Deleted note",
+    "file:create": "Created note",
+    "favorite:add": "Added favorite",
+    "favorite:remove": "Removed favorite",
+    "git:sync:start": "Started manual sync",
+    "git:sync:done": "Finished manual sync",
+    "git:sync:error": "Manual sync failed",
+    "git:diff": "Generated git diff",
+    "brain:validate": "Validated brain",
+    "folder:open": "Opened brain folder",
+    "backup:list": "Listed backups",
+    "backup:create": "Created full backup",
+    "backup:delete": "Deleted backup",
+    "backup:open": "Opened backup folder",
+    "logs:clear": "Cleared local logs",
+  };
+  const base = labels[action] || action;
+  return details.file ? `${base}: ${details.file}` : base;
+}
+
+function logEvent(vault, action, details = {}, req = null) {
   fs.mkdirSync(APP_LOG_DIR, { recursive: true });
+  const actor = eventActor(vault);
+  const origin = requestOrigin(req);
   const event = {
     time: new Date().toISOString(),
     action,
+    label: eventLabel(action, details),
     vault: vault ? path.basename(vault) : "",
-    ...details,
   };
+  if (actor) event.actor = actor;
+  if (origin) event.origin = origin;
+  Object.assign(event, details);
   fs.appendFileSync(APP_LOG_FILE, JSON.stringify(event) + "\n", "utf8");
+}
+
+function vaultKey(vault) {
+  return crypto.createHash("sha256").update(path.resolve(vault)).digest("hex").slice(0, 24);
+}
+
+function readFavoritesStore() {
+  if (!fs.existsSync(FAVORITES_FILE)) return {};
+  try {
+    const data = JSON.parse(fs.readFileSync(FAVORITES_FILE, "utf8"));
+    return data && typeof data === "object" ? data : {};
+  } catch {
+    return {};
+  }
+}
+
+function writeFavoritesStore(store) {
+  fs.mkdirSync(APP_DATA_DIR, { recursive: true });
+  fs.writeFileSync(FAVORITES_FILE, JSON.stringify(store, null, 2), "utf8");
+}
+
+function favoritesForVault(vault) {
+  const store = readFavoritesStore();
+  const items = store[vaultKey(vault)];
+  return Array.isArray(items) ? items.filter((item) => typeof item === "string") : [];
+}
+
+function setFavorite(vault, rel, favorite) {
+  const full = safeFile(vault, rel);
+  if (favorite && !fs.existsSync(full)) throw new Error("Ficheiro nao encontrado");
+  const store = readFavoritesStore();
+  const key = vaultKey(vault);
+  const current = new Set(Array.isArray(store[key]) ? store[key] : []);
+  const cleanRel = path.relative(vault, full).replaceAll(path.sep, "/");
+  if (favorite) current.add(cleanRel);
+  else current.delete(cleanRel);
+  store[key] = Array.from(current).sort((a, b) => a.localeCompare(b));
+  writeFavoritesStore(store);
+  return store[key];
+}
+
+function removeFavorite(vault, rel) {
+  const store = readFavoritesStore();
+  const key = vaultKey(vault);
+  const current = new Set(Array.isArray(store[key]) ? store[key] : []);
+  current.delete(String(rel || "").replace(/\\/g, "/"));
+  store[key] = Array.from(current).sort((a, b) => a.localeCompare(b));
+  writeFavoritesStore(store);
+  return store[key];
 }
 
 function safeVault(input) {
@@ -83,6 +228,108 @@ function safeFile(vault, rel) {
   return full;
 }
 
+function safeFolder(vault, rel) {
+  const full = path.resolve(vault, rel || "");
+  const relative = path.relative(vault, full);
+  if (relative.startsWith("..") || path.isAbsolute(relative)) {
+    throw new Error("Pasta fora do vault");
+  }
+  return full;
+}
+
+function browseFolder(vault, rel = "") {
+  const dir = safeFolder(vault, rel);
+  if (!fs.existsSync(dir) || !fs.statSync(dir).isDirectory()) {
+    throw new Error("Folder not found");
+  }
+
+  const cleanDir = path.relative(vault, dir).replaceAll(path.sep, "/");
+  const parent = cleanDir ? path.dirname(cleanDir).replaceAll("\\", "/") : "";
+  const items = [];
+
+  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+    if (entry.isDirectory()) {
+      if (IGNORE_DIRS.has(entry.name)) continue;
+      const full = path.join(dir, entry.name);
+      items.push({
+        type: "folder",
+        name: entry.name,
+        path: path.relative(vault, full).replaceAll(path.sep, "/"),
+      });
+      continue;
+    }
+
+    if (!entry.isFile() || !entry.name.toLowerCase().endsWith(".md")) continue;
+    const full = path.join(dir, entry.name);
+    const relPath = path.relative(vault, full).replaceAll(path.sep, "/");
+    const text = fs.readFileSync(full, "utf8");
+    items.push({
+      type: "file",
+      name: entry.name,
+      path: relPath,
+      title: titleFromContent(text, relPath),
+      bytes: fs.statSync(full).size,
+    });
+  }
+
+  items.sort((a, b) => {
+    if (a.type !== b.type) return a.type === "folder" ? -1 : 1;
+    return a.name.localeCompare(b.name);
+  });
+
+  return {
+    ok: true,
+    dir: cleanDir === "." ? "" : cleanDir,
+    parent: parent === "." ? "" : parent,
+    items,
+  };
+}
+
+function slugFileName(name) {
+  const clean = String(name || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/\.md$/i, "")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 80);
+  return `${clean || "new-note"}.md`;
+}
+
+function createNewNote(vault, folder, title, contextLinks = []) {
+  const dir = safeFolder(vault, folder || "");
+  fs.mkdirSync(dir, { recursive: true });
+  const baseName = slugFileName(title);
+  const stem = baseName.replace(/\.md$/i, "");
+  const duplicate = walkMd(vault, vault).find((item) => path.basename(item.rel, ".md").toLowerCase() === stem.toLowerCase());
+  if (duplicate) {
+    throw new Error(`A note with this name already exists: ${duplicate.rel}`);
+  }
+  let name = baseName;
+  let full = path.join(dir, name);
+  let index = 2;
+  while (fs.existsSync(full)) {
+    name = `${stem}-${index}.md`;
+    full = path.join(dir, name);
+    index += 1;
+  }
+  const heading = String(title || "").trim() || name.replace(/\.md$/i, "").replaceAll("-", " ");
+  const links = Array.from(new Set((Array.isArray(contextLinks) ? contextLinks : [])
+    .map((link) => String(link || "").trim().replace(/\.md$/i, ""))
+    .filter(Boolean)))
+    .slice(0, 6);
+  const linkedContext = links.length
+    ? `\n## Linked context\n\n${links.map((link) => `- [[${link}]]`).join("\n")}\n`
+    : "";
+  const content = `# ${heading}\n${linkedContext}\n`;
+  fs.writeFileSync(full, content, "utf8");
+  return {
+    rel: path.relative(vault, full).replaceAll(path.sep, "/"),
+    content,
+  };
+}
+
 function walkMd(dir, base, files = []) {
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
     if (entry.isDirectory()) {
@@ -100,6 +347,23 @@ function walkMd(dir, base, files = []) {
 
 function titleFromRel(rel) {
   return path.basename(rel, ".md").replaceAll("-", " ").replaceAll("_", " ");
+}
+
+function titleFromContent(text, rel) {
+  const frontmatter = String(text || "").match(/^---\s*\n([\s\S]*?)\n---/);
+  if (frontmatter) {
+    const name = frontmatter[1].match(/^name:\s*["']?(.+?)["']?\s*$/im);
+    if (name && name[1].trim()) return name[1].trim();
+  }
+
+  const heading = String(text || "").match(/^#\s+(.+?)\s*$/m);
+  if (heading && heading[1].trim()) {
+    return heading[1]
+      .replace(/\s+#*$/, "")
+      .trim();
+  }
+
+  return titleFromRel(rel);
 }
 
 function firstFolder(rel) {
@@ -265,7 +529,7 @@ function buildGraph(vault) {
     byBase.get(base).push(item.rel);
     docs.push({
       id: item.rel,
-      title: titleFromRel(item.rel),
+      title: titleFromContent(text, item.rel),
       folder: firstFolder(item.rel),
       path: item.rel,
       size: stat.size,
@@ -355,7 +619,7 @@ function changedFiles(vault, since) {
     if (stat.mtimeMs > since) {
       changed.push({
         path: item.rel,
-        title: titleFromRel(item.rel),
+        title: titleFromContent(fs.readFileSync(item.full, "utf8"), item.rel),
         modified: stat.mtimeMs,
       });
     }
@@ -389,6 +653,19 @@ function backupAndSave(vault, rel, content) {
   return path.relative(vault, backupPath).replaceAll(path.sep, "/");
 }
 
+function backupAndDelete(vault, rel) {
+  const full = safeFile(vault, rel);
+  if (!fs.existsSync(full)) throw new Error("Ficheiro nao existe: " + rel);
+  const original = fs.readFileSync(full);
+  const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+  const backupDir = path.join(vault, "_BACKUPS", "cerebro-vivo", stamp);
+  fs.mkdirSync(backupDir, { recursive: true });
+  const backupPath = path.join(backupDir, rel.replace(/[\\/]/g, "__"));
+  fs.writeFileSync(backupPath, original);
+  fs.unlinkSync(full);
+  return path.relative(vault, backupPath).replaceAll(path.sep, "/");
+}
+
 function runGit(vault, args) {
   return new Promise((resolve) => {
     execFile("git", args, { cwd: vault, timeout: 120000 }, (error, stdout, stderr) => {
@@ -415,6 +692,201 @@ async function syncVault(vault) {
   }
   steps.push(await runGit(vault, ["log", "-1", "--pretty=format:%h %an %ad %s", "--date=iso"]));
   return steps;
+}
+
+async function gitDiffReport(vault) {
+  const steps = [];
+  steps.push(await runGit(vault, ["status", "--short"]));
+  steps.push(await runGit(vault, ["diff", "--stat"]));
+  steps.push(await runGit(vault, ["diff"]));
+  const parts = [
+    "GIT STATUS",
+    steps[0].stdout || "Clean working tree",
+    "",
+    "GIT DIFF --STAT",
+    steps[1].stdout || "No tracked file changes",
+    "",
+    "GIT DIFF",
+    steps[2].stdout || "No tracked diff",
+  ];
+  return { ok: steps.every((step) => step.ok), steps, report: parts.join("\n") };
+}
+
+function resolveLinkInVault(raw, docPath, byNoExt, byBase) {
+  const cleaned = normalizeLink(raw);
+  const fromDir = path.dirname(docPath).replaceAll("\\", "/");
+  const candidates = [];
+  if (fromDir && fromDir !== ".") candidates.push(`${fromDir}/${cleaned}`.toLowerCase());
+  candidates.push(cleaned.toLowerCase());
+  for (const candidate of candidates) {
+    if (byNoExt.has(candidate)) return byNoExt.get(candidate);
+  }
+  const base = path.basename(cleaned).toLowerCase();
+  const matches = byBase.get(base) || [];
+  return matches.length === 1 ? matches[0] : null;
+}
+
+function validateVault(vault) {
+  const files = walkMd(vault, vault);
+  const byNoExt = new Map();
+  const byBase = new Map();
+  const docs = [];
+  for (const item of files) {
+    const text = fs.readFileSync(item.full, "utf8");
+    const noExt = item.rel.replace(/\.md$/i, "");
+    const base = path.basename(noExt).toLowerCase();
+    byNoExt.set(noExt.toLowerCase(), item.rel);
+    if (!byBase.has(base)) byBase.set(base, []);
+    byBase.get(base).push(item.rel);
+    docs.push({ ...item, text, links: extractWikiLinks(text) });
+  }
+
+  const broken = [];
+  for (const doc of docs) {
+    for (const link of doc.links) {
+      if (!resolveLinkInVault(link, doc.rel, byNoExt, byBase)) {
+        broken.push({ file: doc.rel, link });
+      }
+    }
+  }
+
+  const duplicates = Array.from(byBase.entries())
+    .filter(([, paths]) => paths.length > 1)
+    .map(([name, paths]) => ({ name, paths }));
+
+  const malformedFrontmatter = [];
+  for (const doc of docs) {
+    if (!doc.text.startsWith("---")) continue;
+    const end = doc.text.indexOf("\n---", 3);
+    if (end === -1) malformedFrontmatter.push(doc.rel);
+  }
+
+  const graph = buildGraph(vault);
+  const orphans = graph.nodes
+    .filter((node) => !node.virtual && Number(node.degree || 0) === 0)
+    .map((node) => node.path)
+    .sort((a, b) => a.localeCompare(b));
+
+  const limitList = (items, render) => {
+    if (!items.length) return "none";
+    const visible = items.slice(0, 80).map(render).join("\n");
+    return items.length > 80 ? `${visible}\n... ${items.length - 80} more` : visible;
+  };
+
+  const report = [
+    "BRAIN VALIDATE",
+    `files: ${files.length}`,
+    `resolved links: ${graph.stats.links}`,
+    `broken links: ${broken.length}`,
+    `orphans: ${orphans.length}`,
+    `duplicate note names: ${duplicates.length}`,
+    `malformed frontmatter: ${malformedFrontmatter.length}`,
+    "",
+    "BROKEN LINKS",
+    limitList(broken, (item) => `- ${item.file} -> [[${item.link}]]`),
+    "",
+    "DUPLICATE NOTE NAMES",
+    limitList(duplicates, (item) => `- ${item.name}: ${item.paths.join(" | ")}`),
+    "",
+    "MALFORMED FRONTMATTER",
+    limitList(malformedFrontmatter, (file) => `- ${file}`),
+    "",
+    "ORPHANS",
+    limitList(orphans, (file) => `- ${file}`),
+  ].join("\n");
+
+  return {
+    ok: true,
+    report,
+    summary: {
+      files: files.length,
+      brokenLinks: broken.length,
+      orphans: orphans.length,
+      duplicateNames: duplicates.length,
+      malformedFrontmatter: malformedFrontmatter.length,
+    },
+  };
+}
+
+function backupRoot(vault) {
+  return path.join(vault, "_BACKUPS", "cerebro-vivo-full");
+}
+
+function backupRel(vault, full) {
+  return path.relative(vault, full).replaceAll(path.sep, "/");
+}
+
+function safeBackupDir(vault, id) {
+  const root = backupRoot(vault);
+  const full = path.resolve(root, String(id || ""));
+  const relative = path.relative(root, full);
+  if (!id || relative.startsWith("..") || path.isAbsolute(relative)) {
+    throw new Error("Backup path blocked");
+  }
+  if (!fs.existsSync(full) || !fs.statSync(full).isDirectory()) {
+    throw new Error("Backup not found");
+  }
+  return full;
+}
+
+function copyVaultForBackup(source, target, counts = { files: 0, bytes: 0 }) {
+  fs.mkdirSync(target, { recursive: true });
+  for (const entry of fs.readdirSync(source, { withFileTypes: true })) {
+    if (entry.isDirectory() && IGNORE_DIRS.has(entry.name)) continue;
+    const from = path.join(source, entry.name);
+    const to = path.join(target, entry.name);
+    if (entry.isDirectory()) {
+      copyVaultForBackup(from, to, counts);
+      continue;
+    }
+    if (!entry.isFile()) continue;
+    fs.copyFileSync(from, to);
+    const size = fs.statSync(to).size;
+    counts.files += 1;
+    counts.bytes += size;
+  }
+  return counts;
+}
+
+function listBackups(vault) {
+  const root = backupRoot(vault);
+  if (!fs.existsSync(root)) return [];
+  return fs.readdirSync(root, { withFileTypes: true })
+    .filter((entry) => entry.isDirectory())
+    .map((entry) => {
+      const full = path.join(root, entry.name);
+      const size = vaultContentSize(full);
+      return {
+        id: entry.name,
+        path: backupRel(vault, full),
+        created: fs.statSync(full).birthtimeMs || fs.statSync(full).mtimeMs,
+        files: size.files,
+        bytes: size.bytes,
+      };
+    })
+    .sort((a, b) => b.created - a.created);
+}
+
+function createFullBackup(vault) {
+  const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+  const dest = path.join(backupRoot(vault), stamp);
+  const counts = copyVaultForBackup(vault, dest);
+  return {
+    id: stamp,
+    path: backupRel(vault, dest),
+    files: counts.files,
+    bytes: counts.bytes,
+  };
+}
+
+function openFolder(folder) {
+  const commands = process.platform === "win32"
+    ? ["explorer", [folder]]
+    : process.platform === "darwin"
+      ? ["open", [folder]]
+      : ["xdg-open", [folder]];
+  const child = execFile(commands[0], commands[1], { detached: true, stdio: "ignore" });
+  child.unref();
 }
 
 function readLogs(limit = 200) {
@@ -580,8 +1052,14 @@ async function route(req, res) {
 
     if (url.pathname === "/api/graph") {
       const vault = safeVault(url.searchParams.get("vault"));
-      logEvent(vault, "graph:index", { message: "Indexed graph" });
-      return json(res, 200, buildGraph(vault));
+      const graph = buildGraph(vault);
+      logEvent(vault, "graph:index", {
+        message: "Indexed graph",
+        files: graph.stats.files,
+        links: graph.stats.links,
+        folders: graph.stats.folders,
+      }, req);
+      return json(res, 200, graph);
     }
 
     if (url.pathname === "/api/changes") {
@@ -599,21 +1077,40 @@ async function route(req, res) {
       const rel = url.searchParams.get("file");
       const full = safeFile(vault, rel);
       if (!fs.existsSync(full)) return bad(res, "Ficheiro nao encontrado", 404);
-      logEvent(vault, "file:open", { file: rel });
+      const stat = fs.statSync(full);
+      logEvent(vault, "file:open", { file: rel, bytes: stat.size }, req);
       return json(res, 200, {
         ok: true,
         path: rel,
         content: fs.readFileSync(full, "utf8"),
-        modified: fs.statSync(full).mtimeMs,
+        modified: stat.mtimeMs,
       });
     }
 
     if (url.pathname === "/api/save" && req.method === "POST") {
       const payload = JSON.parse(await readBody(req));
       const vault = safeVault(payload.vault);
-      const backup = backupAndSave(vault, payload.file, String(payload.content ?? ""));
-      logEvent(vault, "file:save", { file: payload.file, backup });
+      const content = String(payload.content ?? "");
+      const backup = backupAndSave(vault, payload.file, content);
+      logEvent(vault, "file:save", { file: payload.file, backup, bytes: Buffer.byteLength(content, "utf8") }, req);
       return json(res, 200, { ok: true, backup });
+    }
+
+    if (url.pathname === "/api/delete" && req.method === "POST") {
+      const payload = JSON.parse(await readBody(req));
+      const vault = safeVault(payload.vault);
+      const backup = backupAndDelete(vault, payload.file);
+      removeFavorite(vault, payload.file);
+      logEvent(vault, "file:delete", { file: payload.file, backup }, req);
+      return json(res, 200, { ok: true, backup });
+    }
+
+    if (url.pathname === "/api/new-note" && req.method === "POST") {
+      const payload = JSON.parse(await readBody(req));
+      const vault = safeVault(payload.vault);
+      const note = createNewNote(vault, payload.folder, payload.title, payload.contextLinks);
+      logEvent(vault, "file:create", { file: note.rel, bytes: Buffer.byteLength(note.content, "utf8") }, req);
+      return json(res, 200, { ok: true, path: note.rel, content: note.content });
     }
 
     if (url.pathname === "/api/logs") {
@@ -622,7 +1119,26 @@ async function route(req, res) {
 
     if (url.pathname === "/api/logs/clear" && req.method === "POST") {
       clearLogs();
+      logEvent(null, "logs:clear", { message: "Cleared local logs" }, req);
       return json(res, 200, { ok: true });
+    }
+
+    if (url.pathname === "/api/favorites") {
+      const vault = safeVault(url.searchParams.get("vault"));
+      return json(res, 200, { ok: true, favorites: favoritesForVault(vault) });
+    }
+
+    if (url.pathname === "/api/browse") {
+      const vault = safeVault(url.searchParams.get("vault"));
+      return json(res, 200, browseFolder(vault, url.searchParams.get("dir") || ""));
+    }
+
+    if (url.pathname === "/api/favorite" && req.method === "POST") {
+      const payload = JSON.parse(await readBody(req));
+      const vault = safeVault(payload.vault);
+      const favorites = setFavorite(vault, payload.file, !!payload.favorite);
+      logEvent(vault, payload.favorite ? "favorite:add" : "favorite:remove", { file: payload.file }, req);
+      return json(res, 200, { ok: true, favorites });
     }
 
     if (url.pathname === "/api/stats") {
@@ -633,14 +1149,83 @@ async function route(req, res) {
     if (url.pathname === "/api/sync" && req.method === "POST") {
       const payload = JSON.parse(await readBody(req));
       const vault = safeVault(payload.vault);
-      logEvent(vault, "git:sync:start", { message: "Manual sync started" });
+      logEvent(vault, "git:sync:start", { message: "Manual sync started" }, req);
       const steps = await syncVault(vault);
       const ok = steps.every((step) => step.ok);
       logEvent(vault, ok ? "git:sync:done" : "git:sync:error", {
         message: ok ? "Manual sync finished" : "Manual sync failed",
         steps,
-      });
+      }, req);
       return json(res, 200, { ok, steps });
+    }
+
+    if (url.pathname === "/api/git-diff" && req.method === "POST") {
+      const payload = JSON.parse(await readBody(req));
+      const vault = safeVault(payload.vault);
+      const result = await gitDiffReport(vault);
+      logEvent(vault, "git:diff", {
+        message: "Git diff generated",
+        steps: result.steps,
+      }, req);
+      return json(res, 200, result);
+    }
+
+    if (url.pathname === "/api/validate" && req.method === "POST") {
+      const payload = JSON.parse(await readBody(req));
+      const vault = safeVault(payload.vault);
+      const result = validateVault(vault);
+      logEvent(vault, "brain:validate", {
+        message: "Brain validation generated",
+        ...result.summary,
+      }, req);
+      return json(res, 200, result);
+    }
+
+    if (url.pathname === "/api/open-folder" && req.method === "POST") {
+      const payload = JSON.parse(await readBody(req));
+      const vault = safeVault(payload.vault);
+      openFolder(vault);
+      logEvent(vault, "folder:open", { message: "Brain folder opened in file manager" }, req);
+      return json(res, 200, { ok: true, report: "Brain folder opened in the system file manager." });
+    }
+
+    if (url.pathname === "/api/backups") {
+      const vault = safeVault(url.searchParams.get("vault"));
+      const backups = listBackups(vault);
+      return json(res, 200, { ok: true, backups });
+    }
+
+    if (url.pathname === "/api/backups/create" && req.method === "POST") {
+      const payload = JSON.parse(await readBody(req));
+      const vault = safeVault(payload.vault);
+      const backup = createFullBackup(vault);
+      logEvent(vault, "backup:create", {
+        message: `Backup created: ${backup.path}`,
+        file: backup.path,
+        files: backup.files,
+        bytes: backup.bytes,
+      }, req);
+      return json(res, 200, { ok: true, backup, backups: listBackups(vault) });
+    }
+
+    if (url.pathname === "/api/backups/delete" && req.method === "POST") {
+      const payload = JSON.parse(await readBody(req));
+      const vault = safeVault(payload.vault);
+      const backupDir = safeBackupDir(vault, payload.id);
+      const rel = backupRel(vault, backupDir);
+      fs.rmSync(backupDir, { recursive: true, force: true });
+      logEvent(vault, "backup:delete", { message: `Backup deleted: ${rel}`, file: rel }, req);
+      return json(res, 200, { ok: true, backups: listBackups(vault) });
+    }
+
+    if (url.pathname === "/api/backups/open" && req.method === "POST") {
+      const payload = JSON.parse(await readBody(req));
+      const vault = safeVault(payload.vault);
+      const backupDir = safeBackupDir(vault, payload.id);
+      const rel = backupRel(vault, backupDir);
+      openFolder(backupDir);
+      logEvent(vault, "backup:open", { message: `Backup folder opened: ${rel}`, file: rel }, req);
+      return json(res, 200, { ok: true, report: "Backup folder opened in the system file manager." });
     }
 
     let filePath = url.pathname === "/" ? "/index.html" : url.pathname;

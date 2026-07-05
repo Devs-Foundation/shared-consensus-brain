@@ -4,37 +4,46 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Shared Consensus Brain</title>
-    <link rel="stylesheet" href="/styles.css?v=16" />
+    <link rel="stylesheet" href="/styles.css?v=32" />
   </head>
   <body>
     <main class="app">
       <section class="topbar">
-        <div class="brand">
-          <span class="pulse"></span>
+        <div class="top-brand">
+          <img src="/assets/devs-foundation-logo.png" alt="" width="34" height="34" />
           <div>
-            <strong>Shared Consensus Brain</strong>
-            <small>shared memory · consensus workflow</small>
+            <strong>Dev's Foundation</strong>
+            <small>dashboard tool</small>
           </div>
         </div>
 
-        <label class="path-box">
-          <span>Brain folder</span>
-          <input id="vaultPath" spellcheck="false" />
-        </label>
-
         <div class="top-actions">
-          <button id="syncBtn">Sync</button>
-          <button id="logsBtn">Logs</button>
-          <button id="loadBtn" class="primary">Load brain</button>
+          <div class="action-group">
+            <button id="favoritesBtn">Favorites</button>
+          </div>
+          <div class="action-group">
+            <button id="gitDiffBtn">See changes</button>
+            <button id="validateBtn">Check brain</button>
+            <button id="backupsBtn">Backups</button>
+          </div>
+          <div class="action-group">
+            <button id="syncBtn">Sync</button>
+            <button id="logsBtn">Logs</button>
+            <button id="loadBtn" class="primary">Load brain</button>
+          </div>
         </div>
       </section>
 
       <section class="workspace">
         <aside class="panel left">
-          <div class="section-title">Dashboard</div>
+          <label class="path-box side-path">
+            <input id="vaultPath" spellcheck="false" placeholder="Brain folder" />
+          </label>
           <label class="search-shell">
-            <span>Search</span>
-            <input id="searchInput" class="search" placeholder="Search..." />
+            <div class="search-row">
+              <button id="openFolderBtn" class="folder-tree-btn" title="Browse brain files" aria-label="Browse brain files">▸</button>
+              <input id="searchInput" class="search" placeholder="Search..." />
+            </div>
           </label>
           <div id="searchResults" class="search-results"></div>
 
@@ -59,7 +68,7 @@
           </div>
 
           <label class="field">
-            <span>Folder</span>
+            <span>View</span>
             <select id="folderFilter">
               <option value="">All</option>
             </select>
@@ -130,12 +139,17 @@
               <strong id="fileTitle">Nothing selected</strong>
               <small id="filePath">Choose a node in the graph</small>
             </div>
-            <button id="backBtn">Close reader</button>
+            <div class="reader-actions">
+              <button id="favoriteToggleBtn" class="favorite-toggle" title="Mark as favorite" aria-label="Mark as favorite">☆</button>
+              <button id="backBtn">Close reader</button>
+            </div>
           </div>
 
           <div class="tabs">
             <button id="readTab" class="active">Read</button>
+            <button id="newNoteBtn">New note</button>
             <button id="editTab">Edit</button>
+            <button id="favoritesTab">Favorites</button>
           </div>
 
           <article id="preview" class="markdown"></article>
@@ -143,6 +157,7 @@
 
           <div class="actions">
             <button id="saveBtn" class="primary">Save</button>
+            <button id="deleteBtn" class="danger">Delete</button>
             <span id="saveStatus"></span>
           </div>
         </aside>
@@ -163,12 +178,42 @@
         <pre id="logsOutput" class="logs-output">No logs loaded yet.</pre>
       </dialog>
 
+      <dialog id="backupsDialog" class="logs-dialog backups-dialog">
+        <div class="reader-head">
+          <div>
+            <div class="section-title">Backups</div>
+            <strong>Brain backup manager</strong>
+            <small>full local snapshots, excluded from the graph</small>
+          </div>
+          <div class="dialog-actions">
+            <button id="createBackupBtn" class="primary">Create backup</button>
+            <button id="closeBackupsBtn">Close</button>
+          </div>
+        </div>
+        <div id="backupsList" class="backup-list">No backups loaded yet.</div>
+      </dialog>
+
+      <dialog id="fileBrowserDialog" class="logs-dialog file-browser-dialog">
+        <div class="reader-head">
+          <div>
+            <div class="section-title">Open folder</div>
+            <strong>Brain files</strong>
+            <small id="browserPath">/</small>
+          </div>
+          <div class="dialog-actions">
+            <button id="closeBrowserBtn">Close</button>
+          </div>
+        </div>
+        <input id="browserSearch" class="browser-search" placeholder="Search files in this list..." />
+        <div id="fileBrowserList" class="file-browser-list">Load a brain first.</div>
+      </dialog>
+
       <footer class="app-credit">
         <span>Built for Devs Foundation</span>
         <a href="https://github.com/Devs-Foundation" target="_blank" rel="noreferrer">github.com/Devs-Foundation</a>
       </footer>
     </main>
 
-    <script src="/app.js?v=16"></script>
+    <script src="/app.js?v=32"></script>
   </body>
 </html>

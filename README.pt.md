@@ -4,7 +4,7 @@
 
 *Também conhecido como **Cerebro Vivo**.*
 
-Uma janela **100% local** sobre um "cérebro" Markdown/git: um grafo vivo que pode pesquisar, ler, editar e sincronizar — com backups automáticos, métricas reais e estatísticas da máquina. É uma **ferramenta de administração e demonstração**, não um substituto do seu editor do dia a dia.
+Uma janela **100% local** sobre um "cérebro" Markdown/git: um grafo vivo que pode pesquisar, ler, **criar**, editar, **marcar como favorito** e sincronizar — com backups automáticos, **validação do cérebro**, métricas reais e estatísticas da máquina. É uma **ferramenta de administração e demonstração**, não um substituto do seu editor do dia a dia.
 
 > **Parte do [Dev's Foundation](https://github.com/Devs-Foundation).** O "cérebro" é a memória partilhada por trás do **[multi-agent consensus method](https://github.com/Devs-Foundation/multi-agent-consensus-method)**. Esta aplicação é um *visualizador* dessa memória — **precisa de um cérebro (uma pasta de notas Markdown) para funcionar.**
 
@@ -94,6 +94,18 @@ Digite em **Search** para filtrar por título, pasta e conteúdo da nota. Os res
 - **Close reader** devolve-o ao grafo.
 - Só podem ser abertos ou escritos ficheiros `.md` dentro do cérebro carregado (path-traversal é bloqueado).
 
+### Nova nota
+
+Crie uma nota diretamente do editor — o separador **New note** deixa-a nomear, escolher a pasta de destino, e abre-a de imediato no editor, para que uma nota nova nunca fique "perdida" num sítio que não consegue encontrar. Nomes duplicados são evitados.
+
+### Favoritos
+
+Marque qualquer nota com uma estrela para a assinalar como favorita (a estrela muda de estado de imediato). O separador **Favorites** lista tudo o que marcou, para acesso num clique. Os favoritos são guardados num pequeno ficheiro local da aplicação — **não** alteram as suas notas Markdown.
+
+### Explorador de ficheiros
+
+Um explorador de ficheiros local permite percorrer as pastas do cérebro em árvore e abrir qualquer ficheiro `.md` diretamente — útil em cérebros grandes onde só o grafo já é muito para percorrer.
+
 ## Backups
 
 Antes de **cada** gravação, o ficheiro original é copiado primeiro, e só depois o novo conteúdo é escrito. Os backups vivem **dentro da pasta do cérebro**:
@@ -103,6 +115,8 @@ _BACKUPS/cerebro-vivo/<YYYY-MM-DDTHH-MM-SS>/<flattened-path>.md
 ```
 
 Para reverter uma edição, copie o backup de volta sobre a nota. `_BACKUPS/` é ignorado pelo indexador e deve ser excluído ao empacotar.
+
+O botão **Backups** abre um pequeno gestor onde pode **criar** um backup completo a pedido, **ver** os backups que já tem (com data e tamanho), e **apagar** os que já não precisa — a eliminação é confirmada e fica dentro da pasta de backups.
 
 ## Logs
 
@@ -124,6 +138,26 @@ O botão **Sync** executa o Git **apenas quando o pressiona**, na pasta do cére
 4. o último commit e cada passo são mostrados na janela **Logs**
 
 Use-o apenas quando a pasta carregada for um clone git válido com o remote correto. Nunca sincroniza silenciosamente, e nunca esconde erros.
+
+## Ferramentas de manutenção
+
+Além de **Sync** e **Logs**, a barra tem:
+
+- **See changes** — mostra o `git diff` atual do cérebro carregado, para rever exatamente o que mudou antes de sincronizar.
+- **Check brain** — um relatório de saúde do cérebro carregado: links quebrados, órfãos, títulos duplicados, nomes de nota duplicados e frontmatter malformado. É a forma mais rápida de detetar dados que precisam de limpeza.
+- **Backups** — o gestor de backups a pedido descrito acima.
+
+Todas correm **localmente e a pedido**, e reportam o resultado na janela **Logs**.
+
+## Fiabilidade — a camada anti-susto
+
+Cada botão lê, escreve, apaga, faz backup, sincroniza ou abre ficheiros — por isso a aplicação foi construída para que **nada falhe em silêncio, nada crie lixo, e nenhum erro despeje texto cru no ecrã**:
+
+- As respostas nunca são assumidas como JSON perfeito. Se uma ação devolver texto simples ou um erro inesperado, torna-se uma **mensagem limpa e legível** em vez de um `Unexpected token …` cru.
+- O carregamento do cérebro está **protegido** para que um caminho errado ou um pedido falhado nunca deixe a interface presa.
+- As ações de escrita (gravar, apagar, nova nota, favorito) e as ferramentas de manutenção (Check, Backups, Sync, Logs) têm cada uma **tratamento de erro dedicado** — quando algo falha, a falha aparece **de forma legível nos Logs** em vez de contaminar o estado do grafo.
+- O indexador **ignora backups e lixo técnico** (`.git`, `_BACKUPS`, `.archive`, `node_modules`, …) para que nunca poluam o grafo nem as contagens.
+- O caminho privado do seu computador **nunca é impresso** em logs, screenshots ou documentação.
 
 ## Métricas
 
