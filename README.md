@@ -1,5 +1,13 @@
 # Shared Consensus Brain
 
+**Local URL:** `http://127.0.0.1:8787/`  
+**Alternative:** `http://localhost:8787/`  
+**Scope:** local-only dashboard for a Markdown/git brain. No public server, no remote API.
+
+![Shared Consensus Brain dashboard](docs/dashboard-current.png)
+
+![Branded graph snapshot](docs/branded-snapshot-current.png)
+
 *Also known as **Cerebro Vivo**.*
 
 A **100% local** window over a Markdown/git "brain": a living graph you can search, read, edit and sync — with automatic backups, real metrics and machine stats. It is an **admin and demonstration tool**, not a replacement for your everyday editor.
