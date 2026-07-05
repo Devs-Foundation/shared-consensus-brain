@@ -4,7 +4,7 @@
 
 *Aussi connu sous le nom de **Cerebro Vivo**.*
 
-Une fenêtre **100 % locale** sur un « cerveau » Markdown/git : un graphe vivant que vous pouvez rechercher, lire, éditer et synchroniser — avec sauvegardes automatiques, métriques réelles et statistiques machine. C'est un **outil d'administration et de démonstration**, pas un remplacement pour votre éditeur habituel.
+Une fenêtre **100 % locale** sur un « cerveau » Markdown/git : un graphe vivant que vous pouvez rechercher, lire, **créer**, éditer, **mettre en favori** et synchroniser — avec sauvegardes automatiques, **validation du cerveau**, métriques réelles et statistiques machine. C'est un **outil d'administration et de démonstration**, pas un remplacement pour votre éditeur habituel.
 
 > **Fait partie de [Dev's Foundation](https://github.com/Devs-Foundation).** Le « cerveau » est la mémoire partagée derrière la **[multi-agent consensus method](https://github.com/Devs-Foundation/multi-agent-consensus-method)**. Cette application est une *visionneuse* de cette mémoire — **elle a besoin d'un cerveau (un dossier de notes Markdown) pour fonctionner.**
 
@@ -94,6 +94,18 @@ Tapez dans **Search** pour filtrer par titre, dossier et contenu des notes. Les 
 - **Close reader** vous ramène au graphe.
 - Seuls les fichiers `.md` à l'intérieur du cerveau chargé peuvent être ouverts ou écrits (le path-traversal est bloqué).
 
+### Nouvelle note
+
+Créez une note directement depuis l'éditeur — l'onglet **New note** vous laisse la nommer, choisir le dossier de destination, et elle s'ouvre immédiatement dans l'éditeur, pour qu'une nouvelle note ne soit jamais « perdue » quelque part où vous ne pouvez pas la retrouver. Les noms en double sont évités.
+
+### Favoris
+
+Marquez n'importe quelle note d'une étoile pour la mettre en favori (l'étoile change d'état instantanément). L'onglet **Favorites** liste tout ce que vous avez marqué, pour un accès en un clic. Les favoris sont conservés dans un petit fichier local de l'application — ils ne **modifient pas** vos notes Markdown.
+
+### Explorateur de fichiers
+
+Un explorateur de fichiers local vous permet de parcourir les dossiers du cerveau sous forme d'arborescence et d'ouvrir n'importe quel fichier `.md` directement — pratique sur les grands cerveaux où le graphe seul est déjà beaucoup à parcourir.
+
 ## Sauvegardes
 
 Avant **chaque** sauvegarde, le fichier original est d'abord copié, puis le nouveau contenu est écrit. Les sauvegardes vivent **à l'intérieur du dossier du cerveau** :
@@ -103,6 +115,8 @@ _BACKUPS/cerebro-vivo/<YYYY-MM-DDTHH-MM-SS>/<flattened-path>.md
 ```
 
 Pour annuler une modification, copiez la sauvegarde par-dessus la note. `_BACKUPS/` est ignoré par l'indexeur et doit être exclu lors du packaging.
+
+Le bouton **Backups** ouvre un petit gestionnaire où vous pouvez **créer** une sauvegarde complète à la demande, **voir** les sauvegardes que vous avez déjà (avec date et taille), et **supprimer** celles dont vous n'avez plus besoin — la suppression est confirmée et reste à l'intérieur du dossier de sauvegardes.
 
 ## Logs
 
@@ -124,6 +138,26 @@ Le bouton **Sync** exécute Git **uniquement quand vous appuyez dessus**, dans l
 4. le dernier commit et chaque étape sont affichés dans la fenêtre **Logs**
 
 Utilisez-le uniquement quand le dossier chargé est un clone git valide avec le bon remote. Il ne synchronise jamais silencieusement, et ne cache jamais les erreurs.
+
+## Outils de maintenance
+
+À côté de **Sync** et **Logs**, la barre propose :
+
+- **See changes** — affiche le `git diff` actuel du cerveau chargé, pour que vous puissiez examiner exactement ce qui a changé avant de synchroniser.
+- **Check brain** — un rapport de santé du cerveau chargé : liens brisés, orphelins, titres en double, noms de note en double et frontmatter malformé. C'est le moyen le plus rapide de repérer des données à nettoyer.
+- **Backups** — le gestionnaire de sauvegardes à la demande décrit ci-dessus.
+
+Tous s'exécutent **localement et à la demande**, et affichent leur résultat dans la fenêtre **Logs**.
+
+## Fiabilité — la couche anti‑frayeur
+
+Chaque bouton lit, écrit, supprime, sauvegarde, synchronise ou ouvre des fichiers — l'application est donc conçue pour que **rien n'échoue en silence, rien ne crée de déchets, et aucune erreur ne déverse de texte brut à l'écran** :
+
+- Les réponses ne sont jamais supposées être du JSON parfait. Si une action renvoie du texte simple ou une erreur inattendue, cela devient un **message propre et lisible** au lieu d'un `Unexpected token …` brut.
+- Le chargement du cerveau est **protégé** pour qu'un mauvais chemin ou une requête échouée ne laisse jamais l'interface bloquée.
+- Les actions d'écriture (sauvegarder, supprimer, nouvelle note, favori) et les outils de maintenance (Check, Backups, Sync, Logs) ont chacun une **gestion d'erreurs dédiée** — quand quelque chose échoue, l'échec apparaît **de façon lisible dans les Logs** au lieu de contaminer l'état du graphe.
+- L'indexeur **ignore les sauvegardes et les déchets techniques** (`.git`, `_BACKUPS`, `.archive`, `node_modules`, …) pour qu'ils ne polluent jamais le graphe ni les comptes.
+- Le chemin privé de votre ordinateur n'est **jamais imprimé** dans les logs, les captures d'écran ou la documentation.
 
 ## Métriques
 

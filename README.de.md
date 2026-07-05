@@ -4,7 +4,7 @@
 
 *Auch bekannt als **Cerebro Vivo**.*
 
-Ein **100 % lokales** Fenster auf ein Markdown/git-„Brain": ein lebendiger Graph, den man durchsuchen, lesen, bearbeiten und synchronisieren kann — mit automatischen Backups, echten Metriken und Maschinenstatistiken. Es ist ein **Admin- und Demonstrationswerkzeug**, kein Ersatz für den alltäglichen Editor.
+Ein **100 % lokales** Fenster auf ein Markdown/git-„Brain": ein lebendiger Graph, den man durchsuchen, lesen, **erstellen**, bearbeiten, **favorisieren** und synchronisieren kann — mit automatischen Backups, **Brain-Validierung**, echten Metriken und Maschinenstatistiken. Es ist ein **Admin- und Demonstrationswerkzeug**, kein Ersatz für den alltäglichen Editor.
 
 > **Teil von [Dev's Foundation](https://github.com/Devs-Foundation).** Das „Brain" ist das gemeinsame Gedächtnis hinter der **[multi-agent consensus method](https://github.com/Devs-Foundation/multi-agent-consensus-method)**. Diese App ist ein *Viewer* über dieses Gedächtnis — **sie braucht ein Brain (einen Ordner mit Markdown-Notizen), um zu laufen.**
 
@@ -94,6 +94,18 @@ In **Search** tippen, um nach Titel, Ordner und Notizinhalt zu filtern. Ergebnis
 - **Close reader** bringt zurück zum Graphen.
 - Nur `.md`-Dateien innerhalb des geladenen Brains können geöffnet oder beschrieben werden (Path-Traversal wird blockiert).
 
+### Neue Notiz
+
+Erstelle eine Notiz direkt aus dem Editor — der **New note**-Tab lässt dich sie benennen, einen Zielordner wählen, und sie öffnet sich sofort im Editor, damit eine neue Notiz nie irgendwo „verloren" geht, wo du sie nicht findest. Doppelte Namen werden vermieden.
+
+### Favoriten
+
+Markiere jede Notiz mit einem Stern als Favorit (der Stern wechselt sofort den Zustand). Der **Favorites**-Tab listet alles auf, was du markiert hast, für Zugriff mit einem Klick. Favoriten werden in einer kleinen lokalen App-Datei gehalten — sie **verändern** deine Markdown-Notizen **nicht**.
+
+### Datei-Browser
+
+Ein lokaler Datei-Browser lässt dich die Ordner des Brains als Baum durchgehen und jede `.md`-Datei direkt öffnen — praktisch bei großen Brains, wo der Graph allein schon viel zu überblicken ist.
+
 ## Backups
 
 Vor **jedem** Speichern wird zuerst die Originaldatei kopiert, dann der neue Inhalt geschrieben. Backups liegen **innerhalb des Brain-Ordners**:
@@ -103,6 +115,8 @@ _BACKUPS/cerebro-vivo/<YYYY-MM-DDTHH-MM-SS>/<flattened-path>.md
 ```
 
 Um eine Bearbeitung rückgängig zu machen, das Backup zurück über die Notiz kopieren. `_BACKUPS/` wird vom Indexer ignoriert und muss beim Packaging ausgeschlossen werden.
+
+Der **Backups**-Button öffnet einen kleinen Manager, in dem du bei Bedarf ein vollständiges Backup **erstellen**, die bereits vorhandenen Backups (mit Datum und Größe) **ansehen** und die nicht mehr benötigten **löschen** kannst — das Löschen wird bestätigt und bleibt innerhalb des Backup-Ordners.
 
 ## Logs
 
@@ -124,6 +138,26 @@ Der **Sync**-Button führt Git **nur aus, wenn man ihn drückt**, im geladenen B
 4. der letzte Commit und jeder Schritt werden im **Logs**-Fenster angezeigt
 
 Nur verwenden, wenn der geladene Ordner ein gültiger Git-Klon mit dem richtigen Remote ist. Es synchronisiert niemals still und verbirgt niemals Fehler.
+
+## Wartungswerkzeuge
+
+Neben **Sync** und **Logs** bietet die Leiste:
+
+- **See changes** — zeigt das aktuelle `git diff` des geladenen Brains, damit du vor dem Sync genau prüfen kannst, was sich geändert hat.
+- **Check brain** — ein Gesundheitsbericht des geladenen Brains: defekte Links, Waisen, doppelte Titel, doppelte Notiznamen und fehlerhaftes Frontmatter. Der schnellste Weg, um Daten zu erkennen, die bereinigt werden müssen.
+- **Backups** — der oben beschriebene On-Demand-Backup-Manager.
+
+Alle laufen **lokal und auf Anforderung** und zeigen ihr Ergebnis im **Logs**-Fenster.
+
+## Zuverlässigkeit — die Anti‑Schreck-Schicht
+
+Jeder Button liest, schreibt, löscht, sichert, synchronisiert oder öffnet Dateien — daher ist die App so gebaut, dass **nichts still fehlschlägt, nichts Müll erzeugt und kein Fehler rohen Text auf den Bildschirm wirft**:
+
+- Antworten werden nie als perfektes JSON angenommen. Gibt eine Aktion einfachen Text oder einen unerwarteten Fehler zurück, wird daraus eine **saubere, lesbare Meldung** statt eines rohen `Unexpected token …`.
+- Das Laden des Brains ist **geschützt**, sodass ein falscher Pfad oder eine fehlgeschlagene Anfrage die Oberfläche nie blockiert.
+- Schreibaktionen (Speichern, Löschen, neue Notiz, Favorit) und die Wartungswerkzeuge (Check, Backups, Sync, Logs) haben je eine **eigene Fehlerbehandlung** — wenn etwas fehlschlägt, erscheint der Fehler **lesbar in den Logs**, statt den Graph-Zustand zu verunreinigen.
+- Der Indexer **überspringt Backups und technischen Ballast** (`.git`, `_BACKUPS`, `.archive`, `node_modules`, …), damit sie weder den Graphen noch die Zählungen verschmutzen.
+- Der private Pfad deines Computers wird **niemals** in Logs, Screenshots oder Dokumentation ausgegeben.
 
 ## Metriken
 

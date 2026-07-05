@@ -3,12 +3,16 @@ const ctx = canvas.getContext("2d");
 
 const SETTINGS_VERSION = 5;
 const GOLDEN_ANGLE = Math.PI * (3 - Math.sqrt(5));
+const BRAND_URL = "https://github.com/Devs-Foundation";
+const brandLogo = new Image();
+brandLogo.src = "/assets/devs-foundation-logo.png";
 
 const state = {
   vault: "",
   graph: { nodes: [], links: [], folders: [], stats: {} },
   nodes: [],
   links: [],
+  favorites: [],
   selected: null,
   hover: null,
   downNode: null,
@@ -20,6 +24,7 @@ const state = {
   panning: false,
   lastMouse: { x: 0, y: 0 },
   lastIndexAt: Date.now(),
+  browserDir: "",
   options: {
     labels: false,
     bg: "#050806",
@@ -59,7 +64,10 @@ const el = {
   editor: document.querySelector("#editor"),
   readTab: document.querySelector("#readTab"),
   editTab: document.querySelector("#editTab"),
+  favoritesTab: document.querySelector("#favoritesTab"),
   saveBtn: document.querySelector("#saveBtn"),
+  deleteBtn: document.querySelector("#deleteBtn"),
+  favoriteToggleBtn: document.querySelector("#favoriteToggleBtn"),
   backBtn: document.querySelector("#backBtn"),
   saveStatus: document.querySelector("#saveStatus"),
   searchResults: document.querySelector("#searchResults"),
@@ -68,12 +76,27 @@ const el = {
   toggleReaderBtn: document.querySelector("#toggleReaderBtn"),
   dashboardToggleBtn: document.querySelector("#dashboardToggleBtn"),
   saveGraphBtn: document.querySelector("#saveGraphBtn"),
+  newNoteBtn: document.querySelector("#newNoteBtn"),
+  favoritesBtn: document.querySelector("#favoritesBtn"),
+  gitDiffBtn: document.querySelector("#gitDiffBtn"),
+  validateBtn: document.querySelector("#validateBtn"),
+  openFolderBtn: document.querySelector("#openFolderBtn"),
+  backupsBtn: document.querySelector("#backupsBtn"),
   syncBtn: document.querySelector("#syncBtn"),
   logsBtn: document.querySelector("#logsBtn"),
   logsDialog: document.querySelector("#logsDialog"),
   closeLogsBtn: document.querySelector("#closeLogsBtn"),
   clearLogsBtn: document.querySelector("#clearLogsBtn"),
   logsOutput: document.querySelector("#logsOutput"),
+  backupsDialog: document.querySelector("#backupsDialog"),
+  closeBackupsBtn: document.querySelector("#closeBackupsBtn"),
+  createBackupBtn: document.querySelector("#createBackupBtn"),
+  backupsList: document.querySelector("#backupsList"),
+  fileBrowserDialog: document.querySelector("#fileBrowserDialog"),
+  closeBrowserBtn: document.querySelector("#closeBrowserBtn"),
+  browserSearch: document.querySelector("#browserSearch"),
+  browserPath: document.querySelector("#browserPath"),
+  fileBrowserList: document.querySelector("#fileBrowserList"),
   machineName: document.querySelector("#machineName"),
   machineCpu: document.querySelector("#machineCpu"),
   machineCpuLoad: document.querySelector("#machineCpuLoad"),
@@ -84,6 +107,16 @@ const el = {
 
 function setStatus(text) {
   el.status.textContent = text;
+}
+
+function graphStatusText() {
+  const stats = state.graph?.stats;
+  if (!stats) return state.vault ? "Brain loaded" : "Choose a local brain folder to start.";
+  return `${stats.files} files, ${stats.links} links`;
+}
+
+function restoreGraphStatus() {
+  setStatus(graphStatusText());
 }
 
 function cssVar(name, value) {
@@ -136,11 +169,44 @@ function worldToScreen(x, y) {
   };
 }
 
-async function api(path) {
-  const res = await fetch(path);
-  const data = await res.json();
-  if (!data.ok) throw new Error(data.error || "Erro");
+async function readApiResponse(res, fallback = "Action failed") {
+  const text = await res.text();
+  let data = {};
+  if (text) {
+    try {
+      data = JSON.parse(text);
+    } catch {
+      const clean = text
+        .replace(/<[^>]+>/g, " ")
+        .replace(/\s+/g, " ")
+        .trim();
+      throw new Error(clean || `${fallback} (${res.status})`);
+    }
+  }
+  if (!res.ok || data.ok === false) {
+    throw new Error(data.error || data.message || `${fallback} (${res.status})`);
+  }
   return data;
+}
+
+async function api(path, fallback = "Action failed") {
+  const res = await fetch(path);
+  return readApiResponse(res, fallback);
+}
+
+async function postJson(path, payload = {}, fallback = "Action failed") {
+  const res = await fetch(path, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  return readApiResponse(res, fallback);
+}
+
+function cleanError(err, fallback = "Action failed") {
+  return String(err && err.message ? err.message : err || fallback)
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 async function init() {
@@ -163,7 +229,12 @@ async function init() {
 }
 
 function restoreTheme() {
-  const saved = JSON.parse(localStorage.getItem("cerebro-vivo-theme") || "{}");
+  let saved = {};
+  try {
+    saved = JSON.parse(localStorage.getItem("cerebro-vivo-theme") || "{}");
+  } catch {
+    saved = {};
+  }
   if (saved.version === SETTINGS_VERSION) {
     Object.assign(state.options, saved);
   } else {
@@ -225,10 +296,24 @@ function bindUi() {
   el.toggleReaderBtn.addEventListener("click", toggleReader);
   el.dashboardToggleBtn.addEventListener("click", toggleDashboard);
   el.saveGraphBtn.addEventListener("click", () => exportSnapshot({ metrics: true, copy: false }));
+  el.newNoteBtn.addEventListener("click", createNote);
+  el.favoritesBtn.addEventListener("click", showFavorites);
+  el.gitDiffBtn.addEventListener("click", showBrainChanges);
+  el.validateBtn.addEventListener("click", checkBrain);
+  el.openFolderBtn.addEventListener("click", openBrainFolder);
+  el.backupsBtn.addEventListener("click", openBackups);
   el.syncBtn.addEventListener("click", syncBrain);
   el.logsBtn.addEventListener("click", openLogs);
-  el.closeLogsBtn.addEventListener("click", () => el.logsDialog.close());
+  el.closeLogsBtn.addEventListener("click", () => {
+    el.logsDialog.close();
+    restoreGraphStatus();
+  });
+  el.logsDialog.addEventListener("close", restoreGraphStatus);
   el.clearLogsBtn.addEventListener("click", clearLogs);
+  el.closeBackupsBtn.addEventListener("click", () => el.backupsDialog.close());
+  el.createBackupBtn.addEventListener("click", createBackup);
+  el.closeBrowserBtn.addEventListener("click", () => el.fileBrowserDialog.close());
+  el.browserSearch.addEventListener("input", renderBrowserSearch);
   el.search.addEventListener("input", () => {
     state.options.search = el.search.value.trim().toLowerCase();
     applyFilters();
@@ -257,7 +342,10 @@ function bindUi() {
   el.size.addEventListener("input", () => { state.options.size = Number(el.size.value) / 100; saveTheme(); });
   el.readTab.addEventListener("click", () => setMode("read"));
   el.editTab.addEventListener("click", () => setMode("edit"));
+  el.favoritesTab.addEventListener("click", showFavorites);
   el.saveBtn.addEventListener("click", saveFile);
+  el.deleteBtn.addEventListener("click", deleteFile);
+  el.favoriteToggleBtn.addEventListener("click", toggleFavorite);
   el.backBtn.addEventListener("click", () => {
     state.selected = null;
     el.fileTitle.textContent = "Nothing selected";
@@ -266,6 +354,8 @@ function bindUi() {
     el.editor.value = "";
     el.editTab.disabled = false;
     el.saveBtn.disabled = false;
+    el.deleteBtn.disabled = false;
+    updateFavoriteButton();
     setMode("read");
     closeReader();
   });
@@ -306,28 +396,67 @@ async function loadGraph(options = {}) {
     return;
   }
   setStatus("Indexing Markdown...");
-  const data = await api(`/api/graph?vault=${encodeURIComponent(state.vault)}`);
-  localStorage.setItem("cerebro-vivo-vault", state.vault);
-  state.graph = data;
-  state.lastIndexAt = Date.now();
-  el.fileCount.textContent = data.stats.files;
-  el.linkCount.textContent = data.stats.links;
-  el.folderCount.textContent = data.stats.folders;
-  el.skillCount.textContent = data.stats.skills ?? "n/a";
-  el.modelCount.textContent = data.stats.contributors ?? "n/a";
-  el.orphanCount.textContent = compactNumber(data.stats.orphans);
-  el.wordCount.textContent = compactNumber(data.stats.totalWords);
-  el.messageCount.textContent = compactNumber(data.stats.messages);
-  el.brainAgeCount.textContent = compactNumber(data.stats.brainAgeDays);
-  fillFolders(data.folders);
-  prepareGraph(data);
-  applyFilters();
-  fitGraphToView({ focusCore: true });
-  requestAnimationFrame(() => fitGraphToView({ focusCore: true }));
-  updateChangeBox([]);
-  loadMachineStats();
-  lockVaultPath();
-  setStatus(`${data.stats.files} files, ${data.stats.links} links`);
+  try {
+    const data = await api(`/api/graph?vault=${encodeURIComponent(state.vault)}`, "Could not load brain");
+    localStorage.setItem("cerebro-vivo-vault", state.vault);
+    state.graph = data;
+    state.lastIndexAt = Date.now();
+    el.fileCount.textContent = data.stats.files;
+    el.linkCount.textContent = data.stats.links;
+    el.folderCount.textContent = data.stats.folders;
+    el.skillCount.textContent = data.stats.skills ?? "n/a";
+    el.modelCount.textContent = data.stats.contributors ?? "n/a";
+    el.orphanCount.textContent = compactNumber(data.stats.orphans);
+    el.wordCount.textContent = compactNumber(data.stats.totalWords);
+    el.messageCount.textContent = compactNumber(data.stats.messages);
+    el.brainAgeCount.textContent = compactNumber(data.stats.brainAgeDays);
+    fillFolders(data.folders);
+    await loadFavorites();
+    prepareGraph(data);
+    applyFilters();
+    fitGraphToView({ focusCore: true });
+    requestAnimationFrame(() => fitGraphToView({ focusCore: true }));
+    updateChangeBox([]);
+    loadMachineStats();
+    lockVaultPath();
+    setStatus(`${data.stats.files} files, ${data.stats.links} links`);
+  } catch (err) {
+    const message = cleanError(err, "Could not load brain");
+    setStatus(message);
+    if (!state.graph) revealVaultPath();
+  }
+}
+
+async function loadFavorites() {
+  if (!state.vault) {
+    state.favorites = [];
+    return;
+  }
+  try {
+    const data = await api(`/api/favorites?vault=${encodeURIComponent(state.vault)}`);
+    state.favorites = Array.isArray(data.favorites) ? data.favorites : [];
+  } catch {
+    state.favorites = [];
+  }
+  updateFavoriteButton();
+}
+
+function isFavorite(path) {
+  return state.favorites.includes(path);
+}
+
+function nodeByPath(path) {
+  return state.nodes.find((node) => !node.virtual && node.path === path) || null;
+}
+
+function updateFavoriteButton() {
+  const canFavorite = !!state.selected && !state.selected.virtual && state.mode !== "favorites";
+  el.favoriteToggleBtn.disabled = !canFavorite;
+  el.favoriteToggleBtn.classList.toggle("active", canFavorite && isFavorite(state.selected.path));
+  el.favoriteToggleBtn.textContent = canFavorite && isFavorite(state.selected.path) ? "★" : "☆";
+  el.favoriteToggleBtn.title = canFavorite && isFavorite(state.selected.path)
+    ? "Remove from favorites"
+    : "Mark as favorite";
 }
 
 function fillFolders(folders) {
@@ -564,6 +693,28 @@ function tick() {
     }
   }
 
+  const anchors = visible.filter((node) => node.radius >= 8 || node.kind === "hub");
+  for (let i = 0; i < anchors.length; i++) {
+    const a = anchors[i];
+    for (let j = i + 1; j < anchors.length; j++) {
+      const b = anchors[j];
+      const dx = b.x - a.x;
+      const dy = b.y - a.y;
+      const dist = Math.hypot(dx, dy) || 1;
+      const minDist = 44 + (a.radius + b.radius) * 5.5;
+      if (dist >= minDist) continue;
+      const push = (minDist - dist) * 0.012 * motion;
+      const fx = (dx / dist) * push;
+      const fy = (dy / dist) * push;
+      const aWeight = a.kind === "hub" ? 0.45 : 1;
+      const bWeight = b.kind === "hub" ? 0.45 : 1;
+      a.vx -= fx * aWeight;
+      a.vy -= fy * aWeight;
+      b.vx += fx * bWeight;
+      b.vy += fy * bWeight;
+    }
+  }
+
   for (const node of visible) {
     const home = node.kind === "orphan" ? homeForce * 1.8 : homeForce;
     const center = node.kind === "orphan" ? 0 : centerForce;
@@ -571,8 +722,8 @@ function tick() {
     node.vy += (node.homeY - node.y) * home;
     node.vx += -node.x * center;
     node.vy += -node.y * center;
-    node.vx *= node.kind === "hub" ? 0.9 : 0.87;
-    node.vy *= node.kind === "hub" ? 0.9 : 0.87;
+    node.vx *= node.kind === "hub" ? 0.84 : 0.87;
+    node.vy *= node.kind === "hub" ? 0.84 : 0.87;
     const maxSpeed = 12 + motion * 14;
     const speed = Math.hypot(node.vx, node.vy);
     if (speed > maxSpeed) {
@@ -661,9 +812,9 @@ function drawWatermark(targetCtx, width, height, includeMetrics) {
   const badge = 46 * scale;
   const line = 22 * scale;
   const metrics = includeMetrics ? snapshotMetrics() : [];
-  const panelWidth = includeMetrics ? 430 * scale : 355 * scale;
-  const panelHeight = includeMetrics ? (122 + Math.ceil(metrics.length / 2) * 25) * scale : 84 * scale;
-  const x = width - panelWidth - pad;
+  const panelWidth = includeMetrics ? 455 * scale : 390 * scale;
+  const panelHeight = includeMetrics ? (142 + Math.ceil(metrics.length / 2) * 25) * scale : 104 * scale;
+  const x = pad;
   const y = height - panelHeight - pad;
 
   targetCtx.save();
@@ -676,19 +827,28 @@ function drawWatermark(targetCtx, width, height, includeMetrics) {
 
   const cx = x + pad + badge / 2;
   const cy = y + pad + badge / 2;
-  targetCtx.strokeStyle = "rgba(255,255,255,0.88)";
-  targetCtx.lineWidth = 2 * scale;
-  targetCtx.beginPath();
-  targetCtx.arc(cx, cy, badge / 2, 0, Math.PI * 2);
-  targetCtx.stroke();
-  targetCtx.beginPath();
-  targetCtx.arc(cx, cy, badge / 2 - 7 * scale, 0, Math.PI * 2);
-  targetCtx.stroke();
-  targetCtx.fillStyle = "rgba(255,255,255,0.94)";
-  targetCtx.font = `800 ${16 * scale}px Segoe UI, Arial`;
-  targetCtx.textAlign = "center";
-  targetCtx.textBaseline = "middle";
-  targetCtx.fillText("DF", cx, cy);
+  if (brandLogo.complete && brandLogo.naturalWidth > 0) {
+    targetCtx.save();
+    targetCtx.beginPath();
+    targetCtx.arc(cx, cy, badge / 2, 0, Math.PI * 2);
+    targetCtx.clip();
+    targetCtx.drawImage(brandLogo, cx - badge / 2, cy - badge / 2, badge, badge);
+    targetCtx.restore();
+  } else {
+    targetCtx.strokeStyle = "rgba(255,255,255,0.88)";
+    targetCtx.lineWidth = 2 * scale;
+    targetCtx.beginPath();
+    targetCtx.arc(cx, cy, badge / 2, 0, Math.PI * 2);
+    targetCtx.stroke();
+    targetCtx.beginPath();
+    targetCtx.arc(cx, cy, badge / 2 - 7 * scale, 0, Math.PI * 2);
+    targetCtx.stroke();
+    targetCtx.fillStyle = "rgba(255,255,255,0.94)";
+    targetCtx.font = `800 ${16 * scale}px Segoe UI, Arial`;
+    targetCtx.textAlign = "center";
+    targetCtx.textBaseline = "middle";
+    targetCtx.fillText("DF", cx, cy);
+  }
 
   targetCtx.textAlign = "left";
   targetCtx.textBaseline = "alphabetic";
@@ -698,17 +858,20 @@ function drawWatermark(targetCtx, width, height, includeMetrics) {
   targetCtx.fillStyle = "rgba(255,255,255,0.68)";
   targetCtx.font = `500 ${13 * scale}px Segoe UI, Arial`;
   targetCtx.fillText("Dev's Foundation · local vault snapshot", x + pad + badge + 13 * scale, y + pad + 42 * scale);
+  targetCtx.fillStyle = "rgba(255,255,255,0.72)";
+  targetCtx.font = `700 ${12 * scale}px Segoe UI, Arial`;
+  targetCtx.fillText(BRAND_URL, x + pad + badge + 13 * scale, y + pad + 62 * scale);
 
   if (includeMetrics) {
     targetCtx.strokeStyle = "rgba(255,255,255,0.14)";
     targetCtx.beginPath();
-    targetCtx.moveTo(x + pad, y + 88 * scale);
-    targetCtx.lineTo(x + panelWidth - pad, y + 88 * scale);
+    targetCtx.moveTo(x + pad, y + 104 * scale);
+    targetCtx.lineTo(x + panelWidth - pad, y + 104 * scale);
     targetCtx.stroke();
 
     const leftX = x + pad;
     const rightX = x + panelWidth / 2 + 8 * scale;
-    let rowY = y + 114 * scale;
+    let rowY = y + 130 * scale;
     targetCtx.font = `700 ${14 * scale}px Segoe UI, Arial`;
     for (let i = 0; i < metrics.length; i += 2) {
       drawMetric(targetCtx, leftX, rowY, metrics[i], scale);
@@ -899,10 +1062,13 @@ async function selectNode(node) {
   el.saveStatus.textContent = "";
   el.editTab.disabled = !!node.virtual;
   el.saveBtn.disabled = !!node.virtual;
+  el.deleteBtn.disabled = !!node.virtual;
+  updateFavoriteButton();
   if (node.virtual) {
     state.fileContent = "";
     el.preview.innerHTML = `<h1>${escapeHtml(node.title)}</h1><p><strong>Unresolved link.</strong></p>`;
     el.editor.value = "";
+    updateFavoriteButton();
     return;
   }
   try {
@@ -911,7 +1077,7 @@ async function selectNode(node) {
     el.editor.value = data.content;
     renderMarkdown(data.content);
   } catch (err) {
-    el.preview.textContent = err.message;
+    el.preview.textContent = cleanError(err, "Could not open file");
   }
 }
 
@@ -923,6 +1089,102 @@ function escapeHtml(text) {
     "\"": "&quot;",
     "'": "&#039;",
   }[ch]));
+}
+
+function normalizeDocKey(value) {
+  return String(value || "")
+    .replace(/\\/g, "/")
+    .replace(/^\.?\//, "")
+    .replace(/\.md$/i, "")
+    .trim()
+    .toLowerCase();
+}
+
+function stripLinkAnchor(value) {
+  return String(value || "").split("#")[0].trim();
+}
+
+function normalizeRelativePath(basePath, target) {
+  const clean = String(target || "").replace(/\\/g, "/").replace(/^\.\//, "");
+  if (!clean.startsWith("../")) return clean;
+  const stack = String(basePath || "").replace(/\\/g, "/").split("/").slice(0, -1);
+  for (const part of clean.split("/")) {
+    if (!part || part === ".") continue;
+    if (part === "..") stack.pop();
+    else stack.push(part);
+  }
+  return stack.join("/");
+}
+
+function resolveInternalNode(raw) {
+  const target = stripLinkAnchor(raw);
+  if (!target) return null;
+  const decoded = decodeURIComponent(target).replace(/\\/g, "/");
+  const clean = normalizeRelativePath(state.selected?.path || "", decoded);
+  const key = normalizeDocKey(clean);
+  const base = normalizeDocKey(clean.split("/").pop());
+  return state.nodes.find((node) => !node.virtual && (
+    normalizeDocKey(node.path) === key ||
+    normalizeDocKey(node.id) === key ||
+    normalizeDocKey(node.title) === key ||
+    normalizeDocKey(node.path.split("/").pop()) === base
+  )) || null;
+}
+
+function renderInlineMarkdown(text) {
+  const tokens = [];
+  const token = (html) => {
+    const id = `\u0000LINK${tokens.length}\u0000`;
+    tokens.push(html);
+    return id;
+  };
+
+  let prepared = text.replace(/!\[([^\]]*)\]\(([^)]+)\)/g, (full, alt, href) => {
+    return token(`<span class="md-image-ref">${escapeHtml(alt || href)}</span>`);
+  });
+
+  prepared = prepared.replace(/\[([^\]]+)\]\(([^)]+)\)/g, (full, label, href) => {
+    const decodedHref = href.trim();
+    const isInternal = /\.md(?:#.*)?$/i.test(decodedHref) || decodedHref.startsWith("./") || decodedHref.startsWith("../");
+    if (isInternal) {
+      const node = resolveInternalNode(decodedHref);
+      if (node) {
+        return token(`<a href="#" class="internal-link" data-path="${escapeHtml(node.path)}">${escapeHtml(label)}</a>`);
+      }
+    }
+    return token(`<a href="${escapeHtml(decodedHref)}" target="_blank" rel="noopener noreferrer">${escapeHtml(label)}</a>`);
+  });
+
+  prepared = prepared.replace(/\[\[([^\]|#]+)(?:#[^\]|]+)?(?:\|([^\]]+))?\]\]/g, (full, raw, alias) => {
+    const label = alias || raw;
+    const node = resolveInternalNode(raw);
+    if (node) {
+      return token(`<a href="#" class="internal-link" data-path="${escapeHtml(node.path)}">${escapeHtml(label)}</a>`);
+    }
+    return token(`<span class="missing-link">[[${escapeHtml(label)}]]</span>`);
+  });
+
+  let html = escapeHtml(prepared);
+  html = html.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
+  html = html.replace(/`([^`]+)`/g, "<code>$1</code>");
+  tokens.forEach((value, index) => {
+    html = html.replaceAll(`\u0000LINK${index}\u0000`, value);
+  });
+  return html;
+}
+
+function bindPreviewLinks() {
+  el.preview.querySelectorAll(".internal-link").forEach((link) => {
+    link.addEventListener("click", (event) => {
+      event.preventDefault();
+      const path = link.dataset.path;
+      const node = state.nodes.find((item) => item.path === path);
+      if (node) {
+        focusNode(node);
+        selectNode(node);
+      }
+    });
+  });
 }
 
 function renderMarkdown(md) {
@@ -939,47 +1201,379 @@ function renderMarkdown(md) {
       html.push(escapeHtml(line) + "\n");
       continue;
     }
-    if (line.startsWith("# ")) html.push(`<h1>${escapeHtml(line.slice(2))}</h1>`);
-    else if (line.startsWith("## ")) html.push(`<h2>${escapeHtml(line.slice(3))}</h2>`);
-    else if (line.startsWith("### ")) html.push(`<h3>${escapeHtml(line.slice(4))}</h3>`);
-    else if (line.trim().startsWith("- ")) html.push(`<p>${escapeHtml(line)}</p>`);
+    if (line.startsWith("# ")) html.push(`<h1>${renderInlineMarkdown(line.slice(2))}</h1>`);
+    else if (line.startsWith("## ")) html.push(`<h2>${renderInlineMarkdown(line.slice(3))}</h2>`);
+    else if (line.startsWith("### ")) html.push(`<h3>${renderInlineMarkdown(line.slice(4))}</h3>`);
+    else if (line.trim().startsWith("- ")) html.push(`<p>${renderInlineMarkdown(line)}</p>`);
     else if (!line.trim()) html.push("<br>");
-    else html.push(`<p>${escapeHtml(line).replace(/\[\[([^\]]+)\]\]/g, "<code>[[$1]]</code>")}</p>`);
+    else html.push(`<p>${renderInlineMarkdown(line)}</p>`);
   }
   el.preview.innerHTML = html.join("");
+  bindPreviewLinks();
 }
 
 function setMode(mode) {
   if (state.selected && state.selected.virtual && mode === "edit") return;
   state.mode = mode;
   document.body.classList.toggle("editing", mode === "edit");
+  document.body.classList.toggle("favorites-mode", mode === "favorites");
   el.readTab.classList.toggle("active", mode === "read");
   el.editTab.classList.toggle("active", mode === "edit");
+  el.favoritesTab.classList.toggle("active", mode === "favorites");
+  updateFavoriteButton();
+}
+
+function showFavorites() {
+  if (!state.vault) {
+    setStatus("Load a brain folder first.");
+    return;
+  }
+  openReader();
+  setMode("favorites");
+  el.fileTitle.textContent = "Favorites";
+  el.filePath.textContent = "Pinned documents in this local brain";
+  el.saveStatus.textContent = "";
+  el.editTab.disabled = true;
+  el.saveBtn.disabled = true;
+  el.deleteBtn.disabled = true;
+
+  const items = state.favorites.map((path) => ({ path, node: nodeByPath(path) }));
+  if (!items.length) {
+    el.preview.innerHTML = `
+      <div class="favorites-empty">
+        <h2>No favorites yet</h2>
+        <p>Open a document and use the star to keep it close.</p>
+      </div>
+    `;
+    return;
+  }
+
+  el.preview.innerHTML = `
+    <div class="favorites-list">
+      ${items.map(({ path, node }) => `
+        <button class="favorite-item ${node ? "" : "missing"}" data-path="${escapeHtml(path)}">
+          <strong>${escapeHtml(node ? node.title : titleFromPath(path))}</strong>
+          <small>${escapeHtml(path)}${node ? "" : " · missing"}</small>
+        </button>
+      `).join("")}
+    </div>
+  `;
+
+  el.preview.querySelectorAll(".favorite-item").forEach((button) => {
+    button.addEventListener("click", () => {
+      const node = nodeByPath(button.dataset.path);
+      if (!node) return;
+      focusNode(node);
+      selectNode(node);
+    });
+  });
+}
+
+function titleFromPath(path) {
+  return String(path || "")
+    .split("/")
+    .pop()
+    .replace(/\.md$/i, "")
+    .replaceAll("-", " ")
+    .replaceAll("_", " ");
+}
+
+async function toggleFavorite() {
+  if (!state.selected || state.selected.virtual) return;
+  const next = !isFavorite(state.selected.path);
+  const file = state.selected.path;
+  const before = [...state.favorites];
+  if (next) state.favorites = Array.from(new Set([...state.favorites, file]));
+  else state.favorites = state.favorites.filter((item) => item !== file);
+  updateFavoriteButton();
+  if (state.mode === "favorites") showFavorites();
+  el.favoriteToggleBtn.disabled = true;
+  try {
+    const data = await postJson("/api/favorite", {
+      vault: state.vault,
+      file,
+      favorite: next,
+    }, "Favorite failed");
+    state.favorites = Array.isArray(data.favorites) ? data.favorites : [];
+    setStatus(next ? "Added to favorites" : "Removed from favorites");
+  } catch (err) {
+    state.favorites = before;
+    setStatus(cleanError(err, "Favorite failed"));
+  } finally {
+    updateFavoriteButton();
+  }
 }
 
 async function saveFile() {
   if (!state.selected || state.selected.virtual) return;
   el.saveStatus.textContent = "Saving...";
   try {
-    const res = await fetch("/api/save", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        vault: state.vault,
-        file: state.selected.path,
-        content: el.editor.value,
-      }),
-    });
-    const data = await res.json();
-    if (!data.ok) throw new Error(data.error || "Save failed");
+    const data = await postJson("/api/save", {
+      vault: state.vault,
+      file: state.selected.path,
+      content: el.editor.value,
+    }, "Save failed");
     state.fileContent = el.editor.value;
     renderMarkdown(state.fileContent);
     setMode("read");
     el.saveStatus.textContent = `Saved. Backup: ${data.backup}`;
     await loadGraph({ keepCurrent: true });
   } catch (err) {
-    el.saveStatus.textContent = err.message;
+    el.saveStatus.textContent = cleanError(err, "Save failed");
   }
+}
+
+async function deleteFile() {
+  if (!state.selected || state.selected.virtual) return;
+  const file = state.selected.path;
+  const ok = confirm(`Delete this note?\n\n${file}\n\nA backup will be created first.`);
+  if (!ok) return;
+  el.saveStatus.textContent = "Deleting...";
+  try {
+    const data = await postJson("/api/delete", { vault: state.vault, file }, "Delete failed");
+    state.selected = null;
+    state.favorites = state.favorites.filter((item) => item !== file);
+    state.fileContent = "";
+    el.fileTitle.textContent = "Nothing selected";
+    el.filePath.textContent = "Choose a node in the graph";
+    el.preview.innerHTML = "";
+    el.editor.value = "";
+    el.saveStatus.textContent = `Deleted. Backup: ${data.backup}`;
+    updateFavoriteButton();
+    setMode("read");
+    closeReader();
+    await loadGraph({ keepCurrent: false });
+    setStatus(`Deleted ${file}`);
+  } catch (err) {
+    const message = cleanError(err, "Delete failed");
+    el.saveStatus.textContent = message;
+    setStatus(message);
+  }
+}
+
+function noteContextLinks(title) {
+  const terms = `${title || ""} ${el.search.value || ""}`
+    .toLowerCase()
+    .split(/[^a-z0-9_áàâãéèêíóôõúç]+/i)
+    .filter((term) => term.length >= 3);
+  const links = [];
+  if (state.selected && !state.selected.virtual) links.push(state.selected.path.replace(/\.md$/i, ""));
+  if (!terms.length) return links.slice(0, 6);
+
+  const scored = state.nodes
+    .filter((node) => !node.virtual && node.path)
+    .map((node) => {
+      const haystack = `${node.title || ""} ${node.path || ""} ${node.searchText || ""}`.toLowerCase();
+      const score = terms.reduce((sum, term) => sum + (haystack.includes(term) ? 1 : 0), 0);
+      return { node, score };
+    })
+    .filter((item) => item.score > 0)
+    .sort((a, b) => b.score - a.score || (b.node.degree || 0) - (a.node.degree || 0));
+
+  for (const item of scored) {
+    const link = item.node.path.replace(/\.md$/i, "");
+    if (!links.includes(link)) links.push(link);
+    if (links.length >= 6) break;
+  }
+  return links;
+}
+
+async function createNote() {
+  if (!state.vault) {
+    setStatus("Load a brain folder first.");
+    return;
+  }
+  const title = prompt("New note title", "New note");
+  if (title === null) return;
+  const cleanTitle = title.trim();
+  if (!cleanTitle) {
+    setStatus("New note needs a title.");
+    return;
+  }
+  const folder = state.options.folder || "";
+  const contextLinks = noteContextLinks(cleanTitle);
+  el.newNoteBtn.disabled = true;
+  setStatus("Creating note...");
+  try {
+    const data = await postJson("/api/new-note", {
+      vault: state.vault,
+      folder,
+      title: cleanTitle,
+      contextLinks,
+    }, "Create failed");
+    el.search.value = "";
+    await loadGraph({ keepCurrent: true });
+    const node = state.nodes.find((item) => item.path === data.path);
+    if (node) {
+      focusNode(node);
+      await selectNode(node);
+      setMode("edit");
+      el.editor.focus();
+      el.editor.setSelectionRange(el.editor.value.length, el.editor.value.length);
+    }
+    setStatus(`Created ${data.path}`);
+  } catch (err) {
+    setStatus(cleanError(err, "Create failed"));
+  } finally {
+    el.newNoteBtn.disabled = false;
+  }
+}
+
+async function postVaultAction(path, button, loadingText, doneText = "Done.") {
+  if (!state.vault) {
+    setStatus("Load a brain folder first.");
+    return null;
+  }
+  button.disabled = true;
+  setStatus(loadingText);
+  el.logsOutput.textContent = `${loadingText}\n`;
+  el.logsDialog.showModal();
+  try {
+    const data = await postJson(path, { vault: state.vault }, "Action failed");
+    el.logsOutput.textContent = data.report || data.message || doneText;
+    setStatus(doneText);
+    return data;
+  } catch (err) {
+    const message = cleanError(err, "Action failed");
+    el.logsOutput.textContent = message;
+    setStatus(message);
+    return null;
+  } finally {
+    button.disabled = false;
+  }
+}
+
+async function showBrainChanges() {
+  await postVaultAction("/api/git-diff", el.gitDiffBtn, "Checking local changes...", "Changes report ready");
+}
+
+async function checkBrain() {
+  await postVaultAction("/api/validate", el.validateBtn, "Checking brain health...", "Brain check complete");
+}
+
+async function openBrainFolder() {
+  if (!state.vault) {
+    setStatus("Load a brain folder first.");
+    return;
+  }
+  state.browserDir = "";
+  el.browserSearch.value = "";
+  el.browserPath.textContent = "/";
+  el.fileBrowserDialog.showModal();
+  await loadBrowserFolder("", el.fileBrowserList, 0);
+}
+
+async function loadBrowserFolder(dir = "", container = el.fileBrowserList, depth = 0) {
+  if (!state.vault) return;
+  const target = container || el.fileBrowserList;
+  const cleanDir = dir || "";
+  if (target === el.fileBrowserList) {
+    state.browserDir = cleanDir;
+    el.browserPath.textContent = cleanDir ? `/${cleanDir}` : "/";
+  }
+  target.textContent = "Loading...";
+  try {
+    const data = await api(`/api/browse?vault=${encodeURIComponent(state.vault)}&dir=${encodeURIComponent(cleanDir)}`);
+    if (target === el.fileBrowserList) {
+      state.browserDir = data.dir || "";
+      el.browserPath.textContent = state.browserDir ? `/${state.browserDir}` : "/";
+    }
+    renderBrowserItems(data.items || [], target, depth);
+  } catch (err) {
+    const message = cleanError(err, "Could not open folder");
+    target.textContent = message;
+    setStatus(message);
+  }
+}
+
+function renderBrowserItems(items, container = el.fileBrowserList, depth = 0) {
+  container.innerHTML = "";
+  if (!items.length) {
+    const empty = document.createElement("div");
+    empty.className = "browser-empty";
+    empty.textContent = "This folder has no Markdown notes.";
+    container.appendChild(empty);
+    return;
+  }
+
+  const tree = document.createElement("div");
+  tree.className = "browser-tree";
+  for (const item of items) {
+    const button = document.createElement("button");
+    button.className = `browser-item ${item.type === "folder" ? "folder" : "file"}`;
+    button.type = "button";
+    button.style.paddingLeft = `${8 + depth * 18}px`;
+    const title = item.type === "folder" ? item.name : (item.title || titleFromPath(item.path));
+    const detail = item.type === "folder" ? item.path : `${item.path} · ${formatBytes(item.bytes || 0)}`;
+    button.innerHTML = `
+      <span class="browser-arrow">▸</span>
+      <span class="browser-icon">${item.type === "folder" ? "DIR" : "MD"}</span>
+      <span>
+        <strong>${escapeHtml(title)}</strong>
+        <small>${escapeHtml(detail)}</small>
+      </span>
+      ${item.type === "file" ? '<span class="browser-edit-action">Edit</span>' : ""}
+    `;
+    const wrapper = document.createElement("div");
+    wrapper.appendChild(button);
+    button.addEventListener("click", async (event) => {
+      event.stopPropagation();
+      if (item.type === "folder") {
+        const existing = wrapper.querySelector(":scope > .browser-children");
+        if (existing) {
+          existing.remove();
+          button.classList.remove("open");
+          return;
+        }
+        button.classList.add("open");
+        const children = document.createElement("div");
+        children.className = "browser-children";
+        wrapper.appendChild(children);
+        await loadBrowserFolder(item.path, children, depth + 1);
+        return;
+      }
+      await openBrowserFile(item);
+    });
+    tree.appendChild(wrapper);
+  }
+  container.appendChild(tree);
+}
+
+function renderBrowserSearch() {
+  const query = el.browserSearch.value.trim().toLowerCase();
+  if (!query) {
+    loadBrowserFolder(state.browserDir || "", el.fileBrowserList, 0);
+    return;
+  }
+
+  el.browserPath.textContent = `Search: ${query}`;
+  const results = state.nodes
+    .filter((node) => !node.virtual)
+    .filter((node) => `${node.title || ""} ${node.path || ""} ${node.searchText || ""}`.toLowerCase().includes(query))
+    .slice(0, 120)
+    .map((node) => ({
+      type: "file",
+      path: node.path,
+      title: node.title || titleFromPath(node.path),
+      bytes: 0,
+    }));
+  renderBrowserItems(results, el.fileBrowserList, 0);
+}
+
+async function openBrowserFile(item) {
+  const node = nodeByPath(item.path) || {
+    id: item.path,
+    path: item.path,
+    title: item.title || titleFromPath(item.path),
+    folder: item.path.includes("/") ? item.path.split("/")[0] : "root",
+    virtual: false,
+  };
+  el.fileBrowserDialog.close();
+  const realNode = nodeByPath(item.path);
+  if (realNode) focusNode(realNode);
+  await selectNode(realNode || node);
+  setMode("edit");
+  el.editor.focus();
 }
 
 async function syncBrain() {
@@ -987,12 +1581,7 @@ async function syncBrain() {
   el.syncBtn.disabled = true;
   setStatus("Syncing with master...");
   try {
-    const res = await fetch("/api/sync", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ vault: state.vault }),
-    });
-    const data = await res.json();
+    const data = await postJson("/api/sync", { vault: state.vault }, "Sync failed");
     const summary = data.steps
       ? data.steps.map((step) => `${step.ok ? "OK" : "ERR"} ${step.command}\n${step.stdout || step.stderr || ""}`).join("\n\n")
       : data.error;
@@ -1001,7 +1590,10 @@ async function syncBrain() {
     el.logsDialog.showModal();
     await loadGraph({ keepCurrent: true });
   } catch (err) {
-    setStatus(err.message);
+    const message = cleanError(err, "Sync failed");
+    setStatus(message);
+    el.logsOutput.textContent = message;
+    el.logsDialog.showModal();
   } finally {
     el.syncBtn.disabled = false;
   }
@@ -1016,31 +1608,135 @@ async function openLogs() {
     const data = await api("/api/logs?limit=200");
     el.logsOutput.textContent = data.logs.map(formatLog).join("\n\n") || "No logs yet.";
   } catch (err) {
-    el.logsOutput.textContent = err.message;
+    el.logsOutput.textContent = cleanError(err, "Could not load logs");
   }
 }
 
 async function clearLogs() {
   el.clearLogsBtn.disabled = true;
   try {
-    const res = await fetch("/api/logs/clear", { method: "POST" });
-    const data = await res.json();
-    if (!data.ok) throw new Error(data.error || "Could not clear logs");
+    await postJson("/api/logs/clear", {}, "Could not clear logs");
     el.logsOutput.textContent = "Logs cleared.";
   } catch (err) {
-    el.logsOutput.textContent = err.message;
+    el.logsOutput.textContent = cleanError(err, "Could not clear logs");
   } finally {
     el.clearLogsBtn.disabled = false;
   }
 }
 
+async function openBackups() {
+  if (!state.vault) {
+    setStatus("Load a brain folder first.");
+    return;
+  }
+  el.backupsList.textContent = "Loading backups...";
+  el.backupsDialog.showModal();
+  await refreshBackups();
+}
+
+async function refreshBackups() {
+  try {
+    const data = await api(`/api/backups?vault=${encodeURIComponent(state.vault)}`);
+    renderBackups(data.backups || []);
+  } catch (err) {
+    el.backupsList.textContent = cleanError(err, "Could not load backups");
+  }
+}
+
+function renderBackups(backups) {
+  if (!backups.length) {
+    el.backupsList.innerHTML = `<div class="hint">No backups yet. Create one before risky edits.</div>`;
+    return;
+  }
+  el.backupsList.innerHTML = backups.map((backup) => `
+    <div class="backup-item" data-id="${escapeHtml(backup.id)}">
+      <div>
+        <strong>${escapeHtml(new Date(backup.created).toLocaleString())}</strong>
+        <small>${escapeHtml(backup.path)} · ${backup.files} files · ${formatBytes(backup.bytes)}</small>
+      </div>
+      <div class="backup-actions">
+        <button class="open-backup-btn">Open</button>
+        <button class="delete-backup-btn danger">Delete</button>
+      </div>
+    </div>
+  `).join("");
+  el.backupsList.querySelectorAll(".backup-item").forEach((item) => {
+    item.querySelector(".open-backup-btn").addEventListener("click", () => openBackupFolder(item.dataset.id));
+    item.querySelector(".delete-backup-btn").addEventListener("click", () => deleteBackup(item.dataset.id));
+  });
+}
+
+async function createBackup() {
+  if (!state.vault) return;
+  el.createBackupBtn.disabled = true;
+  el.backupsList.textContent = "Creating backup...";
+  try {
+    const data = await postJson("/api/backups/create", { vault: state.vault }, "Could not create backup");
+    renderBackups(data.backups || []);
+    el.logsOutput.textContent = `Backup created\n${data.backup.path}\n${data.backup.files} files · ${formatBytes(data.backup.bytes)}`;
+    setStatus("Backup created.");
+  } catch (err) {
+    const message = cleanError(err, "Could not create backup");
+    el.backupsList.textContent = message;
+    setStatus(message);
+  } finally {
+    el.createBackupBtn.disabled = false;
+  }
+}
+
+async function deleteBackup(id) {
+  if (!state.vault || !id) return;
+  if (!confirm(`Delete this backup?\n\n${id}`)) return;
+  try {
+    const data = await postJson("/api/backups/delete", { vault: state.vault, id }, "Could not delete backup");
+    renderBackups(data.backups || []);
+    setStatus("Backup deleted.");
+  } catch (err) {
+    setStatus(cleanError(err, "Could not delete backup"));
+  }
+}
+
+async function openBackupFolder(id) {
+  if (!state.vault || !id) return;
+  try {
+    await postJson("/api/backups/open", { vault: state.vault, id }, "Could not open backup");
+    setStatus("Backup folder opened.");
+  } catch (err) {
+    setStatus(cleanError(err, "Could not open backup"));
+  }
+}
+
 function formatLog(item) {
+  const actor = item.actor
+    ? `${item.actor.name || ""}${item.actor.machine ? ` @ ${item.actor.machine}` : ""}${item.actor.source ? ` (${item.actor.source})` : ""}`.trim()
+    : "";
+  const origin = item.origin
+    ? [item.origin.client, item.origin.address].filter(Boolean).join(" · ")
+    : "";
+  const metrics = [
+    Number.isFinite(item.files) ? `files: ${item.files}` : "",
+    Number.isFinite(item.links) ? `links: ${item.links}` : "",
+    Number.isFinite(item.folders) ? `folders: ${item.folders}` : "",
+    Number.isFinite(item.bytes) ? `bytes: ${formatBytes(item.bytes)}` : "",
+  ].filter(Boolean).join(" · ");
+  const steps = Array.isArray(item.steps) && item.steps.length
+    ? item.steps.map((step) => {
+      const status = step.ok ? "ok" : "fail";
+      const output = [step.stdout, step.stderr].filter(Boolean).join(" | ");
+      return `  - ${status}: ${step.command}${output ? ` -> ${output}` : ""}`;
+    }).join("\n")
+    : "";
   const parts = [
     item.time || "",
-    item.action || "",
+    item.label || item.action || "",
+    actor ? `actor: ${actor}` : "",
+    origin ? `origin: ${origin}` : "",
+    item.vault ? `vault: ${item.vault}` : "",
     item.file ? `file: ${item.file}` : "",
     item.backup ? `backup: ${item.backup}` : "",
+    metrics,
     item.message || "",
+    steps,
   ].filter(Boolean);
   return parts.join("\n");
 }

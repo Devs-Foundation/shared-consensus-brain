@@ -4,7 +4,7 @@
 
 *Also known as **Cerebro Vivo**.*
 
-A **100% local** window over a Markdown/git "brain": a living graph you can search, read, edit and sync — with automatic backups, real metrics and machine stats. It is an **admin and demonstration tool**, not a replacement for your everyday editor.
+A **100% local** window over a Markdown/git "brain": a living graph you can search, read, **create**, edit, **favorite** and sync — with automatic backups, **brain validation**, real metrics and machine stats. It is an **admin and demonstration tool**, not a replacement for your everyday editor.
 
 > **Part of [Dev's Foundation](https://github.com/Devs-Foundation).** The "brain" is the shared memory behind the **[multi-agent consensus method](https://github.com/Devs-Foundation/multi-agent-consensus-method)**. This app is a *viewer* over that memory — **it needs a brain (a folder of Markdown notes) to run.**
 
@@ -94,6 +94,18 @@ Type in **Search** to filter by title, folder and note content. Results are clic
 - **Close reader** returns you to the graph.
 - Only `.md` files inside the loaded brain can be opened or written (path‑traversal is blocked).
 
+### New note
+
+Create a note straight from the editor — the **New note** tab lets you name it, pick a destination folder, and it opens immediately in the editor so a fresh note never gets "lost" somewhere you can't find it. Duplicate names are avoided.
+
+### Favorites
+
+Star any note to mark it as a favorite (the star changes state instantly). The **Favorites** tab lists everything you've marked, for one‑click access. Favorites are kept in a small local app file — they do **not** modify your Markdown notes.
+
+### File browser
+
+A local file browser lets you walk the brain's folders as a tree and open any `.md` file directly — handy on large brains where the graph alone is a lot to scan.
+
 ## Backups
 
 Before **every** save, the original file is copied first, then the new content is written. Backups live **inside the brain folder**:
@@ -103,6 +115,8 @@ _BACKUPS/cerebro-vivo/<YYYY-MM-DDTHH-MM-SS>/<flattened-path>.md
 ```
 
 To revert an edit, copy the backup back over the note. `_BACKUPS/` is ignored by the indexer and must be excluded when packaging.
+
+The **Backups** button opens a small manager where you can **create** a full backup on demand, **see** the backups you already have (with date and size), and **delete** the ones you no longer need — deletion is confirmed and stays inside the backups folder.
 
 ## Logs
 
@@ -124,6 +138,26 @@ The **Sync** button runs Git **only when you press it**, in the loaded brain fol
 4. the last commit and every step are shown in the **Logs** window
 
 Use it only when the loaded folder is a valid git clone with the right remote. It never syncs silently, and it never hides errors.
+
+## Maintenance tools
+
+Alongside **Sync** and **Logs**, the toolbar has:
+
+- **See changes** — shows the current `git diff` of the loaded brain, so you can review exactly what changed before you sync.
+- **Check brain** — a health report of the loaded brain: broken links, orphans, duplicate titles, duplicate note names and malformed frontmatter. It's the fastest way to spot data that needs cleaning.
+- **Backups** — the on‑demand backup manager described above.
+
+All of these run **locally and on demand**, and report their result in the **Logs** window.
+
+## Reliability — the anti‑fright layer
+
+Every button either reads, writes, deletes, backs up, syncs or opens files — so the app is built so **nothing fails silently, nothing creates junk, and no error dumps raw text on screen**:
+
+- Responses are never assumed to be perfect JSON. If an action returns plain text or an unexpected error, it becomes a **clean, readable message** instead of a raw `Unexpected token …`.
+- Brain loading is **guarded** so a bad path or a failed request never leaves the interface stuck.
+- Write actions (save, delete, new note, favorite) and the maintenance tools (Check, Backups, Sync, Logs) each have **dedicated error handling** — when something fails, the failure shows up **legibly in the Logs** instead of contaminating the graph state.
+- The indexer **skips backups and technical clutter** (`.git`, `_BACKUPS`, `.archive`, `node_modules`, …) so they never pollute the graph or the counts.
+- The private path of your computer is **never printed** in logs, screenshots or documentation.
 
 ## Metrics
 
