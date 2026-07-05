@@ -8,6 +8,10 @@ Une fenêtre **100 % locale** sur un « cerveau » Markdown/git : un graphe viva
 
 > **Fait partie de [Dev's Foundation](https://github.com/Devs-Foundation).** Le « cerveau » est la mémoire partagée derrière la **[multi-agent consensus method](https://github.com/Devs-Foundation/multi-agent-consensus-method)**. Cette application est une *visionneuse* de cette mémoire — **elle a besoin d'un cerveau (un dossier de notes Markdown) pour fonctionner.**
 
+> ▶️ **100 % local** — ouvrez http://127.0.0.1:8787 dans votre navigateur (double‑cliquez sur `abrir-cerebro-vivo.bat` sous Windows, ou lancez `node server.js`).
+
+<p align="center"><img src="docs/dashboard.webp" alt="Shared Consensus Brain — dashboard tool" width="900"/></p>
+
 <p align="center"><img src="docs/screenshot.webp" alt="Shared Consensus Brain — brain graph and live dashboard" width="900"/></p>
 
 ---

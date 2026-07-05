@@ -8,6 +8,10 @@
 
 > **属于 [Dev's Foundation](https://github.com/Devs-Foundation) 的一部分。** "大脑"是 **[多智能体共识方法](https://github.com/Devs-Foundation/multi-agent-consensus-method)** 背后的共享记忆。这个应用是该记忆之上的一个*查看器* —— **它需要一个大脑(一个 Markdown 笔记文件夹)才能运行。**
 
+> ▶️ **100% 本地运行** —— 在浏览器中打开 http://127.0.0.1:8787（Windows 上双击 `abrir-cerebro-vivo.bat`，或运行 `node server.js`）。
+
+<p align="center"><img src="docs/dashboard.webp" alt="Shared Consensus Brain — dashboard tool" width="900"/></p>
+
 <p align="center"><img src="docs/screenshot.webp" alt="Shared Consensus Brain — brain graph and live dashboard" width="900"/></p>
 
 ---
