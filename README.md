@@ -8,6 +8,10 @@ A **100% local** window over a Markdown/git "brain": a living graph you can sear
 
 > **Part of [Dev's Foundation](https://github.com/Devs-Foundation).** The "brain" is the shared memory behind the **[multi-agent consensus method](https://github.com/Devs-Foundation/multi-agent-consensus-method)**. This app is a *viewer* over that memory — **it needs a brain (a folder of Markdown notes) to run.**
 
+> ▶️ **Runs 100% locally** — open http://127.0.0.1:8787 in your browser (double‑click `abrir-cerebro-vivo.bat` on Windows, or run `node server.js`).
+
+<p align="center"><img src="docs/dashboard.webp" alt="Shared Consensus Brain — dashboard tool" width="900"/></p>
+
 <p align="center"><img src="docs/screenshot.webp" alt="Shared Consensus Brain — brain graph and live dashboard" width="900"/></p>
 
 ---
