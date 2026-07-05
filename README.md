@@ -148,7 +148,7 @@ Use it only when the loaded folder is a valid git clone with the right remote. I
 Alongside **Sync** and **Logs**, the toolbar has:
 
 - **See changes** — shows the current `git diff` of the loaded brain, so you can review exactly what changed before you sync.
-- **Check brain** — a health report of the loaded brain: broken links, orphans, duplicate titles, duplicate note names and malformed frontmatter. It's the fastest way to spot data that needs cleaning.
+- **Check brain** — a health report of the loaded brain that **classifies** issues instead of dumping one big "broken links" total: **actionable broken links** vs **expected/noise references** (assets & attachments, external URLs written as wikilinks, placeholders/templates, private/local and directory references), plus orphans, **actionable vs expected duplicate note names**, and malformed frontmatter. Real problems stand out from the expected noise.
 - **Backups** — the on‑demand backup manager described above.
 
 All of these run **locally and on demand**, and report their result in the **Logs** window.

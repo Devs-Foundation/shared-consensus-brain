@@ -148,7 +148,7 @@ Utilisez-le uniquement quand le dossier chargé est un clone git valide avec le 
 À côté de **Sync** et **Logs**, la barre propose :
 
 - **See changes** — affiche le `git diff` actuel du cerveau chargé, pour que vous puissiez examiner exactement ce qui a changé avant de synchroniser.
-- **Check brain** — un rapport de santé du cerveau chargé : liens brisés, orphelins, titres en double, noms de note en double et frontmatter malformé. C'est le moyen le plus rapide de repérer des données à nettoyer.
+- **Check brain** — un rapport de santé du cerveau chargé qui **classe** les problèmes au lieu de déverser un seul total de « broken links » : **liens brisés actionnables** vs **références attendues/bruit** (ressources et pièces jointes, URLs externes écrites comme wikilinks, placeholders/modèles, références privées/locales et de répertoire), plus les orphelins, les **noms de note en double actionnables vs attendus**, et le frontmatter malformé. Les vrais problèmes ressortent du bruit attendu.
 - **Backups** — le gestionnaire de sauvegardes à la demande décrit ci-dessus.
 
 Tous s'exécutent **localement et à la demande**, et affichent leur résultat dans la fenêtre **Logs**.

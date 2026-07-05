@@ -11,7 +11,7 @@ A large update that turns the app from a "pretty viewer" into a real **working t
 - **New note** — create a note straight from the editor: name it, pick a destination folder, and it opens immediately so nothing is ever "lost". Duplicate names are avoided.
 - **Favorites** — star any note; the star reacts instantly and a **Favorites** tab lists everything marked. Favorites live in a small local app file and never modify your Markdown.
 - **Local file browser** — walk the brain's folders as a tree and open any `.md` directly.
-- **Check brain** — a health report of the loaded brain: broken links, orphans, duplicate titles, duplicate note names and malformed frontmatter.
+- **Check brain** — a health report that **classifies** issues instead of one flat "broken links" total: **actionable broken links** vs **expected/noise references** (assets & attachments, external URLs written as wikilinks, placeholders/templates, private/local and directory references), plus orphans, **actionable vs expected duplicate note names**, and malformed frontmatter — so real problems stand out from the noise.
 - **See changes** — shows the current `git diff` of the loaded brain before you sync.
 - **Backups manager** — create a full backup on demand, see existing backups (date + size), and delete the ones you no longer need (confirmed, and kept inside the backups folder).
 

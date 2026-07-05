@@ -726,6 +726,102 @@ function resolveLinkInVault(raw, docPath, byNoExt, byBase) {
   return matches.length === 1 ? matches[0] : null;
 }
 
+function collectDirectoryNames(root, dir = root, names = new Set()) {
+  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+    if (!entry.isDirectory()) continue;
+    if (IGNORE_DIRS.has(entry.name)) continue;
+    const full = path.join(dir, entry.name);
+    names.add(entry.name.toLowerCase());
+    collectDirectoryNames(root, full, names);
+  }
+  return names;
+}
+
+function classifyMissingLink(raw, docPath, vault, byNoExt, byBase, directoryNames) {
+  const cleaned = normalizeLink(raw).trim();
+  const lower = cleaned.toLowerCase();
+  const fromDir = path.dirname(docPath).replaceAll("\\", "/");
+  const external = /^[a-z][a-z0-9+.-]*:\/\//i.test(cleaned) || /^mailto:/i.test(cleaned);
+  if (external) return "external";
+
+  const placeholderSet = new Set([
+    "note name",
+    "wikilinks",
+    "wikilink",
+    "links",
+    "source",
+    "caminho/skill",
+    "path/to/file",
+    "filename",
+    "ficheiro.md",
+    "nome-da-nota",
+    "nota-relacionada",
+    "nome-do-ficheiro",
+    "other-guide",
+    "exemplo",
+    "example",
+    "...",
+  ]);
+  if (
+    placeholderSet.has(lower) ||
+    /[<>]/.test(cleaned) ||
+    /^\[/.test(cleaned) ||
+    /\]$/.test(cleaned) ||
+    /^[\w\s'",._-]+,\s*[\w\s'",._-]+$/.test(cleaned) ||
+    /\b(example|exemplo|placeholder|todo|your-|teu-|nome-do-|nome-da-|nota-relacionada)\b/i.test(cleaned)
+  ) {
+    return "placeholder";
+  }
+
+  if (/\b(password|tokens?|secrets?|credentials?|credenciais|senha|chave|keys?|api-key|vps|ip)\b/i.test(cleaned)) {
+    return "private";
+  }
+
+  if (/\.(png|jpe?g|gif|webp|svg|pdf|zip|rar|7z|mp4|mov|mp3|wav)$/i.test(cleaned)) {
+    return "asset";
+  }
+
+  const candidates = [];
+  if (fromDir && fromDir !== ".") candidates.push(path.join(vault, fromDir, cleaned));
+  candidates.push(path.join(vault, cleaned));
+  for (const candidate of candidates) {
+    try {
+      if (fs.existsSync(candidate) && fs.statSync(candidate).isDirectory()) return "directory";
+    } catch {
+      // Ignore stat failures; the validator should continue reporting the rest.
+    }
+  }
+
+  if (directoryNames.has(path.basename(cleaned).toLowerCase())) return "directory";
+
+  const base = path.basename(cleaned).toLowerCase();
+  const ambiguousMatches = byBase.get(base) || [];
+  if (ambiguousMatches.length > 1) return "ambiguous";
+
+  return "actionable";
+}
+
+function isExpectedDuplicateName(name, paths) {
+  const commonNames = new Set([
+    "readme",
+    "skill",
+    "description",
+    "troubleshooting",
+    "examples",
+    "implementation",
+    "errors",
+    "details",
+    "optimization",
+    "advanced-usage",
+    "animation",
+    "overview",
+    "index",
+    "_indice",
+  ]);
+  if (commonNames.has(name)) return true;
+  return paths.every((item) => item.replaceAll("\\", "/").toLowerCase().includes("/skills/"));
+}
+
 function validateVault(vault) {
   const files = walkMd(vault, vault);
   const byNoExt = new Map();
@@ -741,18 +837,32 @@ function validateVault(vault) {
     docs.push({ ...item, text, links: extractWikiLinks(text) });
   }
 
-  const broken = [];
+  const broken = {
+    actionable: [],
+    ambiguous: [],
+    asset: [],
+    external: [],
+    placeholder: [],
+    private: [],
+    directory: [],
+  };
+  const directoryNames = collectDirectoryNames(vault);
   for (const doc of docs) {
     for (const link of doc.links) {
       if (!resolveLinkInVault(link, doc.rel, byNoExt, byBase)) {
-        broken.push({ file: doc.rel, link });
+        const kind = classifyMissingLink(link, doc.rel, vault, byNoExt, byBase, directoryNames);
+        broken[kind].push({ file: doc.rel, link });
       }
     }
   }
 
-  const duplicates = Array.from(byBase.entries())
+  const allDuplicates = Array.from(byBase.entries())
     .filter(([, paths]) => paths.length > 1)
     .map(([name, paths]) => ({ name, paths }));
+  const duplicateNames = {
+    actionable: allDuplicates.filter((item) => !isExpectedDuplicateName(item.name, item.paths)),
+    expected: allDuplicates.filter((item) => isExpectedDuplicateName(item.name, item.paths)),
+  };
 
   const malformedFrontmatter = [];
   for (const doc of docs) {
@@ -773,26 +883,63 @@ function validateVault(vault) {
     return items.length > 80 ? `${visible}\n... ${items.length - 80} more` : visible;
   };
 
+  const noisyLinks =
+    broken.ambiguous.length +
+    broken.asset.length +
+    broken.external.length +
+    broken.placeholder.length +
+    broken.private.length +
+    broken.directory.length;
+
   const report = [
     "BRAIN VALIDATE",
     `files: ${files.length}`,
     `resolved links: ${graph.stats.links}`,
-    `broken links: ${broken.length}`,
+    `actionable broken links: ${broken.actionable.length}`,
+    `expected/noisy unresolved references: ${noisyLinks}`,
     `orphans: ${orphans.length}`,
-    `duplicate note names: ${duplicates.length}`,
+    `duplicate note names: ${duplicateNames.actionable.length} actionable / ${duplicateNames.expected.length} expected`,
     `malformed frontmatter: ${malformedFrontmatter.length}`,
     "",
-    "BROKEN LINKS",
-    limitList(broken, (item) => `- ${item.file} -> [[${item.link}]]`),
+    "ACTIONABLE BROKEN LINKS",
+    limitList(broken.actionable, (item) => `- ${item.file} -> [[${item.link}]]`),
     "",
-    "DUPLICATE NOTE NAMES",
-    limitList(duplicates, (item) => `- ${item.name}: ${item.paths.join(" | ")}`),
+    "AMBIGUOUS LINKS (multiple files share that note name)",
+    limitList(broken.ambiguous, (item) => `- ${item.file} -> [[${item.link}]]`),
+    "",
+    "ASSET / ATTACHMENT REFERENCES",
+    limitList(broken.asset, (item) => `- ${item.file} -> [[${item.link}]]`),
+    "",
+    "EXTERNAL URLS WRITTEN AS WIKILINKS",
+    limitList(broken.external, (item) => `- ${item.file} -> [[${item.link}]]`),
+    "",
+    "PLACEHOLDERS / TEMPLATE LINKS",
+    limitList(broken.placeholder, (item) => `- ${item.file} -> [[${item.link}]]`),
+    "",
+    "PRIVATE / LOCAL REFERENCES",
+    limitList(broken.private, (item) => `- ${item.file} -> [[${item.link}]]`),
+    "",
+    "DIRECTORY REFERENCES",
+    limitList(broken.directory, (item) => `- ${item.file} -> [[${item.link}]]`),
+    "",
+    "DUPLICATE NOTE NAMES - ACTIONABLE",
+    limitList(duplicateNames.actionable, (item) => `- ${item.name}: ${item.paths.join(" | ")}`),
+    "",
+    "DUPLICATE NOTE NAMES - EXPECTED PATTERNS",
+    limitList(duplicateNames.expected, (item) => `- ${item.name}: ${item.paths.join(" | ")}`),
     "",
     "MALFORMED FRONTMATTER",
     limitList(malformedFrontmatter, (file) => `- ${file}`),
     "",
     "ORPHANS",
     limitList(orphans, (file) => `- ${file}`),
+    "",
+    "HEALTH NOTES",
+    "- Links in ACTIONABLE BROKEN LINKS are the priority fixes.",
+    "- External URLs should use normal Markdown links, not [[wikilinks]].",
+    "- Placeholder/template links are useful in docs, but they do not represent real vault edges.",
+    "- Private/local references may be intentional; do not publish secrets.",
+    "- Expected duplicate names are common files such as README.md, SKILL.md and index notes.",
   ].join("\n");
 
   return {
@@ -800,9 +947,17 @@ function validateVault(vault) {
     report,
     summary: {
       files: files.length,
-      brokenLinks: broken.length,
+      brokenLinks: broken.actionable.length,
+      ambiguousLinks: broken.ambiguous.length,
+      assetReferences: broken.asset.length,
+      externalUrlWikilinks: broken.external.length,
+      placeholderLinks: broken.placeholder.length,
+      privateReferences: broken.private.length,
+      directoryReferences: broken.directory.length,
+      noisyLinks,
       orphans: orphans.length,
-      duplicateNames: duplicates.length,
+      duplicateNames: duplicateNames.actionable.length,
+      expectedDuplicateNames: duplicateNames.expected.length,
       malformedFrontmatter: malformedFrontmatter.length,
     },
   };
